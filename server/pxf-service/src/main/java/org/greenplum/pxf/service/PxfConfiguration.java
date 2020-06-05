@@ -28,31 +28,31 @@ public class PxfConfiguration implements WebMvcConfigurer {
         this.pxfServerProperties = pxfServerProperties;
     }
 
-    /**
-     * Configures the TaskExecutor to be used for async requests (i.e. Bridge
-     * Read).
-     *
-     * @return the {@link WebMvcConfigurer} object
-     */
-    @Override
-    public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
-        TaskExecutionProperties properties = pxfServerProperties.getTask();
-        TaskExecutionProperties.Pool pool = properties.getPool();
-        TaskExecutorBuilder builder = new TaskExecutorBuilder();
-        builder = builder.queueCapacity(pool.getQueueCapacity());
-        builder = builder.corePoolSize(pool.getCoreSize());
-        builder = builder.maxPoolSize(pool.getMaxSize());
-        builder = builder.allowCoreThreadTimeOut(pool.isAllowCoreThreadTimeout());
-        builder = builder.keepAlive(pool.getKeepAlive());
-        TaskExecutionProperties.Shutdown shutdown = properties.getShutdown();
-        builder = builder.awaitTermination(shutdown.isAwaitTermination());
-        builder = builder.awaitTerminationPeriod(shutdown.getAwaitTerminationPeriod());
-        builder = builder.threadNamePrefix(properties.getThreadNamePrefix());
-
-        ThreadPoolTaskExecutor taskExecutor = builder.build(PxfThreadPoolTaskExecutor.class);
-
-        taskExecutor.initialize();
-        configurer.setTaskExecutor(taskExecutor);
-
-    }
+//    /**
+//     * Configures the TaskExecutor to be used for async requests (i.e. Bridge
+//     * Read).
+//     *
+//     * @return the {@link WebMvcConfigurer} object
+//     */
+//    @Override
+//    public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
+//        TaskExecutionProperties properties = pxfServerProperties.getTask();
+//        TaskExecutionProperties.Pool pool = properties.getPool();
+//        TaskExecutorBuilder builder = new TaskExecutorBuilder();
+//        builder = builder.queueCapacity(pool.getQueueCapacity());
+//        builder = builder.corePoolSize(pool.getCoreSize());
+//        builder = builder.maxPoolSize(pool.getMaxSize());
+//        builder = builder.allowCoreThreadTimeOut(pool.isAllowCoreThreadTimeout());
+//        builder = builder.keepAlive(pool.getKeepAlive());
+//        TaskExecutionProperties.Shutdown shutdown = properties.getShutdown();
+//        builder = builder.awaitTermination(shutdown.isAwaitTermination());
+//        builder = builder.awaitTerminationPeriod(shutdown.getAwaitTerminationPeriod());
+//        builder = builder.threadNamePrefix(properties.getThreadNamePrefix());
+//
+//        ThreadPoolTaskExecutor taskExecutor = builder.build(PxfThreadPoolTaskExecutor.class);
+//
+//        // TODO: make sure we hook to shutdown hook
+//        taskExecutor.initialize();
+//        configurer.setTaskExecutor(taskExecutor);
+//    }
 }
