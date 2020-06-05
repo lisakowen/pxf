@@ -2,6 +2,7 @@ package org.greenplum.pxf.plugins.hdfs;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.MRJobConfig;
+import org.greenplum.pxf.api.error.PxfRuntimeException;
 import org.greenplum.pxf.api.model.RequestContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -130,7 +131,7 @@ public class HcfsTypeTest {
     public void testErrorsWhenProfileAndDefaultFSDoNotMatch() {
         context.setProfileScheme("s3a");
         configuration.set("fs.defaultFS", "hdfs://0.0.0.0:8020");
-        Exception e = assertThrows(IllegalArgumentException.class,
+        Exception e = assertThrows(PxfRuntimeException.class,
                 () -> HcfsType.getHcfsType(context));
         assertEquals("profile protocol (s3a) is not compatible with server filesystem (hdfs)", e.getMessage());
     }
