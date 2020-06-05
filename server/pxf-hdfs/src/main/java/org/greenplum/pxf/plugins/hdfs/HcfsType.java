@@ -5,6 +5,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
+import org.greenplum.pxf.api.error.PxfRuntimeException;
 import org.greenplum.pxf.api.model.RequestContext;
 import org.greenplum.pxf.api.utilities.Utilities;
 import org.slf4j.Logger;
@@ -98,20 +99,22 @@ public enum HcfsType {
 
         // protocol from RequestContext will take precedence over defaultFS
         if (StringUtils.isNotBlank(schemeFromContext)) {
-            checkForConfigurationMismatch(defaultFSScheme, schemeFromContext);
+            checkForConfigurationMismatch(defaultFSScheme, schemeFromContext, context.getServerName());
             return schemeFromContext;
         }
 
         return defaultFSScheme;
     }
 
-    private static void checkForConfigurationMismatch(String defaultFSScheme, String schemeFromContext) {
+    private static void checkForConfigurationMismatch(String defaultFSScheme, String schemeFromContext, String serverName) {
         // do not allow protocol mismatch, unless defaultFs has file:// scheme
         if (!FILE_SCHEME.equals(defaultFSScheme) &&
                 !StringUtils.equalsIgnoreCase(defaultFSScheme, schemeFromContext)) {
-            throw new IllegalArgumentException(
+            throw new PxfRuntimeException(
                     String.format("profile protocol (%s) is not compatible with server filesystem (%s)",
-                            schemeFromContext, defaultFSScheme));
+                            schemeFromContext, defaultFSScheme),
+                    String.format("There is a configuration mismatch. Make sure that the specified server '%s' is correct or that the configuration is correct.",
+                            serverName));
         }
     }
 
