@@ -17,8 +17,8 @@
 -- m/file:.*;/
 -- s/file:.*; lineNumber: \d+; columnNumber: \d+;/SOME_ERROR_LOCATION/g
 --
--- m/Exception Report.*(Some headers in).*/
--- s/Report.*/Some headers in the query are missing from the file. Please check the file and try again./
+-- m/Some headers in the query are missing from the file.*/
+-- s/Some headers in the query are missing from the file.*/Some headers in the query are missing from the file. Please check the file and try again./
 --
 -- m/DETAIL/
 -- s/DETAIL/CONTEXT/

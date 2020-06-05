@@ -20,8 +20,8 @@ SELECT * FROM gpdb_types_nobatch_target ORDER BY t1;
 -- m/file:.*;/
 -- s/file:.*; lineNumber: \d+; columnNumber: \d+;/SOME_ERROR_LOCATION/g
 --
--- m/Exception report.*/
--- s/report.*/SOME_EXCEPTION/
+-- m/  Detail: Key .*/
+-- s/  Detail: Key .*/  Detail: Key (t1)=(some key) already exists./
 --
 -- m/DETAIL/
 -- s/DETAIL/CONTEXT/

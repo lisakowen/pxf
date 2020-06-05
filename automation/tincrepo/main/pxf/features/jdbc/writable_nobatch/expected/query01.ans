@@ -52,8 +52,8 @@ SELECT * FROM gpdb_types_nobatch_target ORDER BY t1;
 -- m/file:.*;/
 -- s/file:.*; lineNumber: \d+; columnNumber: \d+;/SOME_ERROR_LOCATION/g
 --
--- m/Exception report.*/
--- s/report.*/SOME_EXCEPTION/
+-- m/  Detail: Key .*/
+-- s/  Detail: Key .*/  Detail: Key (t1)=(some key) already exists./
 --
 -- m/DETAIL/
 -- s/DETAIL/CONTEXT/
@@ -66,4 +66,6 @@ SELECT * FROM gpdb_types_nobatch_target ORDER BY t1;
 --
 -- end_matchsubs
 INSERT INTO pxf_jdbc_writable_nobatch SELECT t1, t2, num1 FROM gpdb_types;
-ERROR: duplicate key value violates unique constraint &quot;gpdb_types_nobatch_target_t1_key&quot;
+ERROR: duplicate key value violates unique constraint "gpdb_types_nobatch_target_t1_key"
+  Detail: Key (t1)=(some key) already exists.
+HINT:  Check the PXF logs located in the 'logs-dir' directory on host 'mdw' or 'set client_min_messages=DEBUG1' for additional details.
