@@ -38,7 +38,7 @@ import java.util.Map;
 @Component
 public class PxfErrorAttributes extends DefaultErrorAttributes {
 
-    private static final String DEFAULT_HINT = "Check the PXF logs located in the '%s/logs' directory of host '%s' or 'set client_min_messages=DEBUG1' for additional details";
+    private static final String DEFAULT_HINT = "Check the PXF logs located in the '%s/logs' directory on host '%s' or 'set client_min_messages=DEBUG1' for additional details.";
 
     private final PxfServerProperties pxfProperties;
     private final ServerProperties properties;
@@ -69,21 +69,24 @@ public class PxfErrorAttributes extends DefaultErrorAttributes {
         Map<String, Object> errorAttributes = super.getErrorAttributes(webRequest, includeStackTrace);
 
         Throwable throwable = getError(webRequest);
+        StringBuilder hintSb = new StringBuilder(DEFAULT_HINT.length() * 3);
         if (throwable instanceof PxfRuntimeException && StringUtils.isNotBlank(((PxfRuntimeException) throwable).getHint())) {
-            errorAttributes.put("hint", ((PxfRuntimeException) throwable).getHint());
-        } else {
-            String hostname;
-            if (properties != null && properties.getAddress() != null) {
-                hostname = properties.getAddress().getHostName();
-            } else {
-                try {
-                    hostname = InetAddress.getLocalHost().getHostName();
-                } catch (UnknownHostException e) {
-                    hostname = System.getenv("HOSTNAME");
-                }
-            }
-            errorAttributes.put("hint", String.format(DEFAULT_HINT, pxfProperties.getConf(), hostname));
+            hintSb.append(((PxfRuntimeException) throwable).getHint())
+                    .append(" ");
         }
+        String hostname;
+        if (properties != null && properties.getAddress() != null) {
+            hostname = properties.getAddress().getHostName();
+        } else {
+            try {
+                hostname = InetAddress.getLocalHost().getHostName();
+            } catch (UnknownHostException e) {
+                hostname = System.getenv("HOSTNAME");
+            }
+        }
+        hintSb.append(String.format(DEFAULT_HINT, pxfProperties.getConf(), hostname));
+
+        errorAttributes.put("hint", hintSb.toString());
         return errorAttributes;
     }
 

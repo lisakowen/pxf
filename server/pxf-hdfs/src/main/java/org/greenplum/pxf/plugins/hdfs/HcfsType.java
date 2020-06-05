@@ -113,7 +113,7 @@ public enum HcfsType {
             throw new PxfRuntimeException(
                     String.format("profile protocol (%s) is not compatible with server filesystem (%s)",
                             schemeFromContext, defaultFSScheme),
-                    String.format("There is a configuration mismatch. Make sure that the specified server '%s' is correct or that the configuration is correct.",
+                    String.format("There is a configuration mismatch. Make sure that the specified server (%s) is correct or that the configuration for the server is correct.",
                             serverName));
         }
     }
