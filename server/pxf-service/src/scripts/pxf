@@ -440,13 +440,19 @@ function doStop()
     # first try endpoint (assume it might be disabled)
     if $curl --max-time 5 --silent -X POST "localhost:$PXF_PORT/actuator/shutdown" | grep "Shutting down, bye..." > /dev/null; then
       for i in $(seq 1 $STOP_WAIT_TIME); do
-        isRunning "$pid" || { echoGreen "PXF stopped [pid=$pid]"; return 0; }
-        sleep 1
+        if isRunning "$pid"; then
+          sleep 1
+        else
+          echoGreen "PXF stopped [pid=$pid]"
+          rm -f $pid_file
+          return 0
+        fi
       done
     fi
 
     # second try a nice kill and if that doesn't work force kill
     do_stop "$pid" "$pid_file" || do_stop "$pid" "$pid_file" "-f"
+    rm -f $pid_file
 }
 
 do_stop() {

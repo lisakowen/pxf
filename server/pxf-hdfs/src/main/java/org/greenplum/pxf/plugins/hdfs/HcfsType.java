@@ -15,6 +15,7 @@ import java.net.URI;
 import java.util.Arrays;
 
 import static org.apache.hadoop.fs.FileSystem.FS_DEFAULT_NAME_KEY;
+import static org.greenplum.pxf.api.model.ConfigurationFactory.PXF_CONFIG_SERVER_DIRECTORY_PROPERTY;
 
 public enum HcfsType {
     ADL,
@@ -99,22 +100,22 @@ public enum HcfsType {
 
         // protocol from RequestContext will take precedence over defaultFS
         if (StringUtils.isNotBlank(schemeFromContext)) {
-            checkForConfigurationMismatch(defaultFSScheme, schemeFromContext, context.getServerName());
+            checkForConfigurationMismatch(defaultFSScheme, schemeFromContext, context.getServerName(), context.getConfiguration().get(PXF_CONFIG_SERVER_DIRECTORY_PROPERTY));
             return schemeFromContext;
         }
 
         return defaultFSScheme;
     }
 
-    private static void checkForConfigurationMismatch(String defaultFSScheme, String schemeFromContext, String serverName) {
+    private static void checkForConfigurationMismatch(String defaultFSScheme, String schemeFromContext, String serverName, String configurationDirectory) {
         // do not allow protocol mismatch, unless defaultFs has file:// scheme
         if (!FILE_SCHEME.equals(defaultFSScheme) &&
                 !StringUtils.equalsIgnoreCase(defaultFSScheme, schemeFromContext)) {
             throw new PxfRuntimeException(
-                    String.format("profile protocol (%s) is not compatible with server filesystem (%s)",
-                            schemeFromContext, defaultFSScheme),
-                    String.format("There is a configuration mismatch. Make sure that the specified server (%s) is correct or that the configuration for the server is correct.",
-                            serverName));
+                    String.format("profile filesystem '%s' for server '%s' is not compatible with configured filesystem '%s'",
+                            schemeFromContext, serverName, defaultFSScheme),
+                    String.format("Make sure no configuration files under '%s' specify the property 'defaultFS' with the value starting with '%s://', which is incompatible with profile filesystem '%s'.",
+                            configurationDirectory, defaultFSScheme, schemeFromContext));
         }
     }
 

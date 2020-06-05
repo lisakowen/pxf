@@ -45,4 +45,8 @@ s/^psql:.* (WARNING|INFO|ERROR)/$1/
 m/^--.*/
 s/^--.*//
 
+# replace the default hint with a generic log-dir and host
+m/Check the PXF logs located in the.*/
+s/Check the PXF logs located in the.*/Check the PXF logs located in the 'logs-dir' directory on host 'mdw' or 'set client_min_messages=DEBUG1' for additional details./
+
 -- end_matchsubs

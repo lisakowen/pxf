@@ -131,9 +131,11 @@ public class HcfsTypeTest {
     public void testErrorsWhenProfileAndDefaultFSDoNotMatch() {
         context.setProfileScheme("s3a");
         configuration.set("fs.defaultFS", "hdfs://0.0.0.0:8020");
-        Exception e = assertThrows(PxfRuntimeException.class,
+        configuration.set("pxf.config.server.directory", "/my/config/directory");
+        PxfRuntimeException e = assertThrows(PxfRuntimeException.class,
                 () -> HcfsType.getHcfsType(context));
-        assertEquals("profile protocol (s3a) is not compatible with server filesystem (hdfs)", e.getMessage());
+        assertEquals("profile filesystem 's3a' for server 'default' is not compatible with configured filesystem 'hdfs'", e.getMessage());
+        assertEquals("Make sure no configuration files under '/my/config/directory' specify the property 'defaultFS' with the value starting with 'hdfs://', which is incompatible with profile filesystem 's3a'.", e.getHint());
     }
 
     @Test
