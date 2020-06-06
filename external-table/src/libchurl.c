@@ -19,7 +19,10 @@
 
 #include "libchurl.h"
 #include "miscadmin.h"
+#include "utils/builtins.h"
+#include "utils/fmgroids.h"
 #include "utils/guc.h"
+#include "utils/jsonapi.h"
 
 /* include libcurl without typecheck.
  * This allows wrapping curl_easy_setopt to be wrapped
@@ -91,6 +94,12 @@ typedef struct
 	struct curl_slist *headers;
 } churl_settings;
 
+/* the null action object used for pure validation */
+static JsonSemAction nullSemAction =
+{
+	NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL
+};
 
 churl_context *churl_new_context(void);
 static void		create_curl_handle(churl_context *context);
@@ -125,8 +134,9 @@ static void		free_http_response(churl_context *context);
 static void		compact_internal_buffer(churl_buffer *buffer);
 static void		realloc_internal_buffer(churl_buffer *buffer, size_t required);
 static bool		handle_special_error(long response, StringInfo err);
-static char	   *get_http_error_msg(long http_ret_code, char *msg, char *curl_error_buffer);
+static char	   *get_http_error_msg(long http_ret_code, char *msg, char *curl_error_buffer, char **hint_message, char **trace_message);
 static char	   *build_header_str(const char *format, const char *key, const char *value);
+static bool	IsValidJson(text *json);
 
 
 /*
@@ -937,8 +947,9 @@ check_response_code(churl_context *context)
 	else if (response_code != 200 && response_code != 100)
 	{
 		StringInfoData err;
-		char	   *http_error_msg;
-		char	   *addr;
+		char	   *hint_msg = NULL,
+				   *http_error_msg,
+				   *trace_msg = NULL;
 
 		initStringInfo(&err);
 
@@ -949,14 +960,11 @@ check_response_code(churl_context *context)
 			response_text = context->download_buffer->ptr + context->download_buffer->bot;
 		}
 
-		/* add remote http error code */
-		appendStringInfo(&err, "remote component error (%ld)", response_code);
-
-		addr = get_dest_address(context->curl_handle);
-		if (addr)
+		appendStringInfo(&err, "PXF server error");
+		if ((DEBUG1 >= log_min_messages) || (DEBUG1 >= client_min_messages))
 		{
-			appendStringInfo(&err, " from %s", addr);
-			pfree(addr);
+			/* add remote http error code */
+			appendStringInfo(&err, "(%ld)", response_code);
 		}
 
 		if (!handle_special_error(response_code, &err))
@@ -966,24 +974,24 @@ check_response_code(churl_context *context)
 			 * response_text could be NULL in some cases. get_http_error_msg
 			 * checks for that.
 			 */
-			http_error_msg = get_http_error_msg(response_code, response_text, context->curl_error_buffer);
+			http_error_msg = get_http_error_msg(response_code, response_text, context->curl_error_buffer, &hint_msg, &trace_msg);
 
-			/*
-			 * check for a specific confusing error, and replace with a
-			 * clearer one
-			 */
-			if (strstr(http_error_msg, "instance does not contain any root resource classes") != NULL)
-			{
-				appendStringInfo(&err, " : PXF not correctly installed in CLASSPATH");
-			}
-			else
-			{
-				appendStringInfo(&err, ": %s", http_error_msg);
-			}
+			appendStringInfo(&err, " : %s", http_error_msg);
 		}
 
-		elog(ERROR, "%s", err.data);
-
+		if (trace_msg != NULL || hint_msg != NULL)
+		{
+			ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+				errmsg("%s", err.data),
+				errhint("%s", (trace_msg != NULL ? trace_msg : hint_msg))));
+		}
+		else
+		{
+			ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+				errmsg("%s", err.data)));
+		}
 	}
 
 #if PG_VERSION_NUM < 90400
@@ -992,10 +1000,48 @@ check_response_code(churl_context *context)
 }
 
 /*
+ * Returns true if the provided json text is valid JSON, false otherwise
+ */
+static bool
+IsValidJson(text *json)
+{
+	MemoryContext oldcontext    = CurrentMemoryContext;
+	bool          is_valid_json = true;
+	JsonLexContext *lex;
+
+	PG_TRY();
+	{
+		/* validate it */
+		lex = makeJsonLexContext(json, false);
+		pg_parse_json(lex, &nullSemAction);
+	}
+	PG_CATCH();
+	{
+		is_valid_json = false;
+		MemoryContextSwitchTo(oldcontext);
+	}
+	PG_END_TRY();
+
+	return is_valid_json;
+}
+
+/*
  * Extracts the error message from the full HTTP response
  * We test for several conditions in the http_ret_code and the HTTP response message.
  * The first condition that matches, defines the final message string and ends the function.
  * The layout of the HTTP response message is:
+
+ {
+  "timestamp": "the server timestamp",
+  "status": status code int,
+  "error": "error description",
+  "message": "error message",
+  "trace": "the stack trace for the error",
+  "path": "uri for the request",
+  "hint": "hint for the user"
+ }
+
+ * An alternative HTTP response message looks like this
 
  <html>
  <head>
@@ -1021,13 +1067,21 @@ check_response_code(churl_context *context)
  * Our first priority is to get the paragraph <p> inside <body>, and in case we don't find it, then we try to get
  * the <title>.
  */
-static char *
-get_http_error_msg(long http_ret_code, char *msg, char *curl_error_buffer)
+char *
+get_http_error_msg(long http_ret_code, char *msg, char *curl_error_buffer, char **hint_message, char **trace_message)
 {
 	char	   *start,
 			   *end,
-			   *ret;
+			   *ret,
+			   *fmessagestr = "message",
+			   *ftracestr = "trace",
+			   *fhintstr = "hint";
+
+	text	   *error_text;
+	Datum		result;
 	StringInfoData errMsg;
+	FmgrInfo *json_object_field_text_fn;
+
 
 	initStringInfo(&errMsg);
 
@@ -1039,6 +1093,7 @@ get_http_error_msg(long http_ret_code, char *msg, char *curl_error_buffer)
 
 	if (http_ret_code == 0)
 	{
+		*hint_message = "Use the 'pxf [cluster] start' command to start the PXF service.";
 		if (curl_error_buffer == NULL)
 			return "There is no pxf servlet listening on the host and port specified in the external table url";
 		else
@@ -1132,6 +1187,64 @@ get_http_error_msg(long http_ret_code, char *msg, char *curl_error_buffer)
 			ret = pnstrdup(start, end - start);
 			return ret;
 		}
+	}
+
+	error_text = cstring_to_text(msg);
+
+	/*
+	 * 5. First make sure we have a valid JSON so we can extract the fields we
+	 * need for the error message. If we don't have a valid JSON just return
+	 * the raw error text.
+	 */
+	if (!IsValidJson(error_text))
+		return msg;
+
+	/*
+	 * 6. The "normal" case - There is an HTTP response and we parse the
+	 * json response fields "message" and "trace"
+	 */
+	json_object_field_text_fn = palloc(sizeof(FmgrInfo));
+
+	/* find the json_object_field_text function */
+	fmgr_info(F_JSON_OBJECT_FIELD_TEXT, json_object_field_text_fn);
+
+	if ((DEBUG1 >= log_min_messages) || (DEBUG1 >= client_min_messages))
+	{
+		/* get the "trace" field from the json error */
+		result = FunctionCall2(json_object_field_text_fn,
+			PointerGetDatum(error_text),
+			PointerGetDatum(cstring_to_text(ftracestr)));
+
+		if (DatumGetPointer(result) != NULL)
+			*trace_message = text_to_cstring(DatumGetTextP(result));
+	}
+
+	/* get the "hint" field from the json error */
+	result = FunctionCall2(json_object_field_text_fn,
+		PointerGetDatum(error_text),
+		PointerGetDatum(cstring_to_text(fhintstr)));
+
+	if (DatumGetPointer(result) != NULL)
+		*hint_message = text_to_cstring(DatumGetTextP(result));
+
+	/* get the "message" field from the json error */
+	result = FunctionCall2(json_object_field_text_fn,
+		PointerGetDatum(error_text),
+		PointerGetDatum(cstring_to_text(fmessagestr)));
+
+	pfree(json_object_field_text_fn);
+
+	if (DatumGetPointer(result) != NULL)
+	{
+		char* parsed_message = text_to_cstring(DatumGetTextP(result));
+
+		end = strstr(parsed_message, "\n");
+		if (end != NULL)
+		{
+			ret = pnstrdup(parsed_message, end - parsed_message);
+			return ret;
+		}
+		return parsed_message;
 	}
 
 	/*
