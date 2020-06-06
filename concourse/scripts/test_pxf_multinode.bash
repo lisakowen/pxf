@@ -200,7 +200,7 @@ function setup_pxf_kerberos_on_cluster() {
 			cp ${PXF_CONF_DIR}/templates/pxf-site.xml ${PXF_CONF_DIR}/servers/db-hive-kerberos/pxf-site.xml &&
 			sed -i 's|gpadmin/_HOST@EXAMPLE.COM|${HADOOP_2_USER}/_HOST@${REALM2}|g' ${PXF_CONF_DIR}/servers/db-hive-kerberos/pxf-site.xml &&
 			sed -i -e 's|/pxf.service.keytab<|/pxf.service.2.keytab<|g' ${PXF_CONF_DIR}/servers/db-hive-kerberos/pxf-site.xml &&
-			sed -i -e 's|\${pxf.service.user.impersonation.enabled}|false|g' ${PXF_CONF_DIR}/servers/db-hive-kerberos/pxf-site.xml &&
+			sed -i -e 's|<value>true</value>|<value>false</value>|g' ${PXF_CONF_DIR}/servers/db-hive-kerberos/pxf-site.xml &&
 			sed -i 's|</configuration>|<property><name>hadoop.security.authentication</name><value>kerberos</value></property></configuration>|g' \
 				${PXF_CONF_DIR}/servers/db-hive-kerberos/jdbc-site.xml &&
 			${PXF_HOME}/bin/pxf cluster sync
