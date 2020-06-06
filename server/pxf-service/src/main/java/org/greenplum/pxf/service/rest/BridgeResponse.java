@@ -49,7 +49,7 @@ public class BridgeResponse implements StreamingResponseBody {
         securityService.doAs(context, action);
     }
 
-    private Void writeToInternal(OutputStream out) throws IOException{
+    private Void writeToInternal(OutputStream out) throws IOException {
         final int fragment = context.getDataFragment();
         final String dataDir = context.getDataSource();
         long recordCount = 0;
@@ -80,7 +80,7 @@ public class BridgeResponse implements StreamingResponseBody {
                 LOG.error("Remote connection closed by GPDB (Enable debug for stacktrace)");
             }
         } catch (Exception e) {
-            throw new IOException(e.getMessage(), e);
+            throw e instanceof IOException ? (IOException) e : new IOException(e.getMessage(), e);
         } finally {
             LOG.debug("Stopped streaming fragment {} of resource {}, {} records.", fragment, dataDir, recordCount);
             try {
