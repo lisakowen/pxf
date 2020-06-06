@@ -15,9 +15,6 @@
 -- m/file:.*;/
 -- s/file:.*; lineNumber: \d+; columnNumber: \d+;/SOME_ERROR_LOCATION/g
 --
--- m/Exception Report.*(ExceptionInInitializerError|NoClassDefFoundError).*/
--- s/Report.*/SOME_EXCEPTION/
---
 -- m/DETAIL/
 -- s/DETAIL/CONTEXT/
 --
@@ -29,5 +26,6 @@
 --
 -- end_matchsubs
 SELECT * FROM pxf_profiles_small_data ORDER BY name;
-ERROR:  remote component error (500) from 'SOME_IP:SOME_PORT':  type  Exception SOME_EXCEPTION
+ERROR:  PXF server error : Failed to instantiate [org.greenplum.pxf.service.profile.ProfilesConf]: Constructor threw exception; nested exception is org.greenplum.pxf.service.profile.ProfileConfException: Profiles configuration /usr/local/pxf/conf/pxf-profiles-default.xml could not be loaded: org.xml.sax.SAXParseException; systemId: SOME_ERROR_LOCATION Content is not allowed in prolog.
+HINT:  Check the PXF logs located in the 'logs-dir' directory on host 'mdw' or 'set client_min_messages=DEBUG1' for additional details.
 DETAIL:  External table pxf_profiles_small_data, file pxf://pxf_automation_data/data.txt?PROFILE=hdfs:text

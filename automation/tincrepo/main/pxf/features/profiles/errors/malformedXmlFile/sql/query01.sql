@@ -15,9 +15,6 @@
 -- m/file:.*;/
 -- s/file:.*; lineNumber: \d+; columnNumber: \d+;/SOME_ERROR_LOCATION/g
 --
--- m/Exception Report.*(ExceptionInInitializerError|NoClassDefFoundError).*/
--- s/Report.*/SOME_EXCEPTION/
---
 -- m/DETAIL/
 -- s/DETAIL/CONTEXT/
 --

@@ -15,9 +15,6 @@
 -- m/file:.*;/
 -- s/file:.*; lineNumber: \d+; columnNumber: \d+;/SOME_ERROR_LOCATION/g
 --
--- m/Exception Report.*(Could not determine plugin class name).*/
--- s/Report.*/SOME_EXCEPTION/
---
 -- m/DETAIL/
 -- s/DETAIL/CONTEXT/
 --
@@ -29,5 +26,6 @@
 --
 -- end_matchsubs
 SELECT * FROM pxf_profiles_small_data ORDER BY name;
-ERROR:  remote component error (500) from 'SOME_IP:SOME_PORT':  type  Exception SOME_EXCEPTION
+ERROR:  PXF server error : 'name' must not be null
+HINT:  Check the PXF logs located in the 'logs-dir' directory on host 'mdw' or 'set client_min_messages=DEBUG1' for additional details.
 DETAIL:  External table pxf_profiles_small_data, file pxf://pxf_automation_data/data.txt?PROFILE=HdfsTextSimple
