@@ -26,5 +26,7 @@
 -- end_matchsubs
 SELECT *  FROM cloudaccess_no_server_credentials_no_config_with_hdfs;
 ERROR:  PXF server error : profile filesystem 's3a' for server 'default' is not compatible with configured filesystem 'hdfs'
+-- start_ignore
 HINT:  Make sure no configuration files under 'server-dir' specify the property 'defaultFS' with the value starting with 'hdfs://', which is incompatible with profile filesystem 's3a'. Check the PXF logs located in the 'logs-dir' directory on host 'mdw' or 'set client_min_messages=DEBUG1' for additional details.
+-- end_ignore
 DETAIL:  External table cloudaccess_no_server_credentials_no_config_with_hdfs, file pxf://pxf_automation_data?PROFILE=s3:text&ACCESS_AND_SECRET_KEY
