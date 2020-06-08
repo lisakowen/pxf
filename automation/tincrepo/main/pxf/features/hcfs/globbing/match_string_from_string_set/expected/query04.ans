@@ -230,10 +230,10 @@ select * from hcfs_glob_match_string_from_string_set_10 order by name, num;
 -- # create a match/subs
 --
 -- m/Illegal file pattern: Unclosed group near index.*/
--- s/Illegal file pattern: Unclosed group near index.*/Illegal file pattern: Unclosed group near index xxx/
+-- s/Illegal file pattern: Unclosed group near index.*/Unclosed group near index xxx/
 --
 -- m/Unclosed group near index.*/
--- s/Unclosed group near index.*/Illegal file pattern: Unclosed group near index xxx/
+-- s/Unclosed group near index.*/Unclosed group near index xxx/
 --
 -- m/DETAIL/
 -- s/DETAIL/CONTEXT/
