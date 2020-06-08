@@ -19,6 +19,7 @@ package org.greenplum.pxf.service.rest;
  * under the License.
  */
 
+import org.apache.catalina.connector.ClientAbortException;
 import org.greenplum.pxf.api.model.RequestContext;
 import org.greenplum.pxf.service.bridge.Bridge;
 import org.greenplum.pxf.service.bridge.BridgeFactory;
@@ -32,8 +33,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
-
-import java.io.IOException;
 
 /*
  * This class handles the subpath /<version>/Bridge/ of this
@@ -64,7 +63,24 @@ public class BridgeResource extends BaseResource {
      */
     @GetMapping(value = "/Bridge", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public ResponseEntity<StreamingResponseBody> read(
-            @RequestHeader MultiValueMap<String, String> headers) throws IOException {
+            @RequestHeader MultiValueMap<String, String> headers) {
+        try {
+            return readInternal(headers);
+        } catch (ClientAbortException e) {
+            // Occurs whenever client (GPDB) decides to end the connection
+            if (LOG.isDebugEnabled()) {
+                // Stacktrace in debug
+                LOG.debug("Remote connection closed by GPDB", e);
+            } else {
+                LOG.error("Remote connection closed by GPDB (Enable debug for stacktrace)");
+            }
+        }
+        // Return an empty outputStream on error
+        return new ResponseEntity<>(outputStream -> {
+        }, HttpStatus.OK);
+    }
+
+    private ResponseEntity<StreamingResponseBody> readInternal(MultiValueMap<String, String> headers) throws ClientAbortException {
 
         RequestContext context = parseRequest(headers);
         Bridge bridge = bridgeFactory.getBridge(context);

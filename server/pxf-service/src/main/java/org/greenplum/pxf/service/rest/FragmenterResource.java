@@ -20,6 +20,7 @@ package org.greenplum.pxf.service.rest;
  */
 
 import com.google.common.util.concurrent.UncheckedExecutionException;
+import org.apache.catalina.connector.ClientAbortException;
 import org.apache.log4j.Level;
 import org.greenplum.pxf.api.configuration.PxfServerProperties;
 import org.greenplum.pxf.api.model.Fragment;
@@ -40,6 +41,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.security.PrivilegedExceptionAction;
 import java.util.List;
