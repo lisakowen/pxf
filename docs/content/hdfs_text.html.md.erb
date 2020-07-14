@@ -241,17 +241,17 @@ The specific keywords and values used in the [CREATE EXTERNAL TABLE](https://gpd
 | delimiter    | The delimiter character in the data. For `FORMAT` `'CSV'`, the default \<delim_value\> is a comma `,`. Preface the \<delim_value\> with an `E` when the value is an escape sequence. Examples: `(delimiter=E'\t')`, `(delimiter ':')`. |
 | DISTRIBUTED BY    | If you want to load data from an existing Greenplum Database table into the writable external table, consider specifying the same distribution policy or \<column_name\> on both tables. Doing so will avoid extra motion of data between segments on the load operation. |
 
-Writable external tables that you create using the `hdfs:text` profile can optionally use record or block compression. The PXF `hdfs:text` profile supports the following compression codecs:
+Writable external tables that you create using the `hdfs:text` profile can optionally use record or block compression. The PXF `hdfs:text` profile supports the following compression codec classes and short names:
 
-- org.apache.hadoop.io.compress.DefaultCodec
-- org.apache.hadoop.io.compress.GzipCodec
-- org.apache.hadoop.io.compress.BZip2Codec
+- org.apache.hadoop.io.compress.DefaultCodec (default)
+- org.apache.hadoop.io.compress.GzipCodec (gzip)
+- org.apache.hadoop.io.compress.BZip2Codec (bzip2)
 
 You specify the compression codec via custom options in the `CREATE EXTERNAL TABLE` `LOCATION` clause. The `hdfs:text` profile support the following custom write options:
 
 | Option  | Value Description |
 |-------|-------------------------------------|
-| COMPRESSION_CODEC    | The compression codec Java class name. If this option is not provided, Greenplum Database performs no data compression. Supported compression codecs include:<br>`org.apache.hadoop.io.compress.DefaultCodec`<br>`org.apache.hadoop.io.compress.BZip2Codec`<br>`org.apache.hadoop.io.compress.GzipCodec` |
+| COMPRESSION_CODEC    | The compression codec Java class name. If this option is not provided, Greenplum Database performs no data compression. Supported compression codecs include: `default`, `bzip2`, and `gzip`. |
 | COMPRESSION_TYPE    | The compression type to employ; supported values are `RECORD` (the default) or `BLOCK`. |
 | THREAD-SAFE | Boolean value determining if a table query can run in multi-threaded mode. The default value is `TRUE`. Set this option to `FALSE` to handle all requests in a single thread for operations that are not thread-safe (for example, compression). |
 
@@ -343,7 +343,7 @@ Perform the following procedure to create Greenplum Database writable external t
 
     ``` sql
     postgres=# CREATE WRITABLE EXTERNAL TABLE pxf_hdfs_writabletbl_2 (location text, month text, num_orders int, total_sales float8)
-                LOCATION ('pxf://data/pxf_examples/pxfwritable_hdfs_textsimple2?PROFILE=hdfs:text&COMPRESSION_CODEC=org.apache.hadoop.io.compress.GzipCodec')
+                LOCATION ('pxf://data/pxf_examples/pxfwritable_hdfs_textsimple2?PROFILE=hdfs:text&COMPRESSION_CODEC=gzip')
               FORMAT 'TEXT' (delimiter=':');
     ```
 
