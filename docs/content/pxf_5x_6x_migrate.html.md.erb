@@ -1,0 +1,94 @@
+---
+title: Migrating to PXF 6
+---
+
+If you are using PXF version 5.x in your Greenplum Database 5 or 6 installation, you may be required to migrate some of your PXF configuration before you run PXF version 6.
+
+The PXF version 5 to 6 migration procedure has two parts. You perform one procedure in your PXF 5 installation, then install, configure, and migrate to PXF 6:
+
+-   [Step 1: Complete PXF 5 Pre-Migration Actions](#pxf5pre)
+-   [Step 2: Migrate to PXF 6](#pxfmig6)
+
+
+## <a id="prerequisites"></a>Prerequisites
+
+Before migrating from PXF 5 to PXF 6, ensure that you can:
+
+- Identify the version number of your Greenplum installation. If it is older than 5.21.2, upgrade to a newer 5.x version.
+- Identify the version of PXF running in the Greenplum cluster.
+- Identify the file system location of the PXF `$PXF_CONF` directory in your PXF 5 installation. `$PXF_CONF` contains PXF and server configuration, security keytab files, and log configuration and log files.
+
+**Note**: This topic uses `$PXF_5_CONF` to refer to your existing PXF 5 user configuration directory, and `$PXF_CONF` to refer to the (new) PXF 6 user configuration directory.
+
+
+## <a id="pxf5pre"></a>Step 1: Complete PXF Greenplum Database 5 Pre-Migration Actions
+
+Perform this procedure in your Greenplum Database installation:
+
+1. Log in to the Greenplum Database master node. For example:
+
+    ``` shell
+    $ ssh gpadmin@<gpmaster>
+    ```
+
+2. Identify and note the PXF version number. For example:
+
+    ``` shell
+    gpadmin@gpmaster$ pxf version
+    ```
+
+3. Recall the filesystem location of the `$PXF_CONF` directory in your PXF 5 installation (`$PXF_5_CONF`). You will specify a new `PXF_CONF` for PXF 6, and migrate and/or copy certain configuration information from PXF 5 to PXF 6.
+
+3. Stop PXF on each segment host as described in [Stopping PXF](cfginitstart_pxf.html#stop_pxf).
+
+5. Install PXF 6, then continue the migration with [Step 2: Migrating to PXF 6](#pxfmig6).
+
+
+## <a id="pxfmig6"></a>Step 2: Migrating to PXF 6
+
+After you install PXF 6, perform the following procedure to migrate your PXF configuration and start the new PXF software:
+
+1. Log in to the Greenplum Database master node. For example:
+
+    ``` shell
+    $ ssh gpadmin@<gpmaster>
+    ```
+
+2. Initialize PXF on each segment host as described in [Initializing PXF](init_pxf.html), specify a new `PXF_CONF` directory for PXF 6.
+
+3. If you utilized the `PXF_USER_IMPERSONATION`, `PXF_KEYTAB`, or `PXF_PRINCIPAL` settings in your `$PXF_5_CONF/pxf-env.sh` environment file, you must now specify this information in a `pxf-site.xml` file that you create for all relevant PXF 6 server configuration(s). Refer to [About Kerberos and User Impersonation Configuration (pxf-site.xml)](cfg_server.html#pxf-site) for further information about configuring user impersonation and Kerberos in PXF.
+
+4. PXF 6 employs `log4j2` logging. If you configured PXF server `log4j` logging in your `$PXF_5_CONF/pxf-log4.properties` file, you must migrate this configuration to the `$PXF_CONF/pxf-log4j2.xml` file in your PXF 6 configuration. XXX
+
+5. If you use PXF to access HBase, you must copy the PXF 6 `$PXF_HOME/lib/pxf-hbase-XXX.jar` JAR file to every node in your HBase cluster and update `$HBASE_CLASSPATH` as described in the *Reading HBase Table Data* [prerequisites](hbase_pxf.html#prereq).
+
+6. If you use PXF to access a MapR Hadoop cluster, you must copy the MapR JAR files in the `$PXF_5_CONF/lib` directory to the PXF 6 `$PXF_CONF/lib` directory. For example, if `$PXF_5_CONF=$HOME/pxf5cfg` and PXF 6 `$PXF_CONF=$HOME/pxf6cfg`:
+
+    ``` shell
+    gpadmin@gpmaster$ cp $HOME/pxf5cfg/lib/<mapr-jar> $HOME/pxf6cfg/lib/
+    ```
+
+7. If registered any JAR dependencies in your PXF 5 configuration, copy the JARs too the PXF 6 configuration:
+
+    ``` shell
+    gpadmin@gpmaster$ cp $HOME/pxf5cfg/lib/<depends-jar> $HOME/pxf6cfg/lib/
+    ```
+
+8. Copy your PXF 5 server definitions to your PXF 6 configuration:
+
+    ``` shell
+    gpadmin@gpmaster$ cp -r $HOME/pxf5cfg/servers/* $HOME/pxf6cfg/servers/
+    ```
+
+9. Perform any version-applicable PXF upgrade actions identified in [Step 2](upgrade_pxf_rpm.html#pxfup) of the PXF 5.x upgrade documentation. **Start with step 3 in the procedure**.
+
+10. Synchronize the PXF configuration from the Greenplum Database master host to the standby master and each segment host in the cluster. For example:
+
+    ``` shell
+    gpadmin@gp6master$ pxf cluster sync
+    ```
+ 
+11. Start PXF on each Greenplum Database segment host as described in [Starting PXF](cfginitstart_pxf.html#start_pxf).
+
+12. Verify the migration by testing that each PXF external table can access the referenced data store.
+
