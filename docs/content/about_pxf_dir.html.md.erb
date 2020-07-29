@@ -2,7 +2,7 @@
 title: About the PXF Installation and Configuration Directories
 ---
 
-PXF is installed to `$GPHOME/pxf` on your master and segment nodes when you install Greenplum Database. If you install the PXF `.rpm` package, PXF is installed to `/usr/local/pxf-gp<greenplum-major-version>`, or to a directory of your choosing. This documentation uses `$PXF_HOME` to refer to the PXF installation directory.
+PXF may be installed to `$GPHOME/pxf` on your master and segment nodes when you install Greenplum Database. If you install the PXF `.rpm` package, PXF is installed to `/usr/local/pxf-gp<greenplum-major-version>`, or to a directory of your choosing. This documentation uses `$PXF_HOME` to refer to the PXF installation directory.
 
 ## <a id="installed"></a>PXF Installation Directories
 
@@ -10,10 +10,9 @@ The following PXF files and directories are installed to `$PXF_HOME` when you in
 
 | Directory | Description                                                                                                                                                                                                                                |
 |--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| apache&#8209;tomcat/     | The PXF Tomcat directory.  |
 | bin/                | The PXF script and executable directory.                                                                                                                                                                                                                       |
 | commit.sha          | The commit identifier for this PXF release.                                                                                                                                                                                                                       |
-| conf/                | The PXF internal configuration directory. This directory contains the `pxf-env-default.sh` and `pxf-profiles-default.xml` configuration files. After initializing PXF, this directory will also include the `pxf-private.classpath` file. |
+| conf/                | The PXF internal configuration directory. This directory contains the `pxf-env-default.sh` and `pxf-profiles-default.xml` configuration files. ??After initializing PXF, this directory will also include the `pxf-private.classpath` file.?? |
 | gpextable/           | The PXF extension files. The files in this directory are copied to the Greenplum installation (`$GPHOME`) on a single host or all hosts in the cluster when you run `pxf [cluster] register`.                                                                                                                                                                                                              |
 | lib/                 | The PXF library directory.                                                                                                                                                                                                                       |
 | templates/                | Configuration templates for PXF. |
