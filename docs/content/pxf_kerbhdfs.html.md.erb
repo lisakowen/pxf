@@ -44,17 +44,44 @@ Before you configure PXF for access to a secure HDFS filesystem, ensure that you
 
 ## <a id="scenarios"></a>Use Cases and Configuration Scenarios
 
-The following table describes the use cases and configuration required when you use PXF to access a Kerberos-secured Hadoop cluster.
+The following scenarios describe the use cases and configuration required when
+you use PXF to access a Kerberos-secured Hadoop cluster.
 
 **Note**: These scenarios assume that `gpadmin` is the PXF process owner.
 
-| Use Case | Impersonation  | Service User |  PXF Config | Hadoop&nbsp;Config&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
-|----------|---------|-------------|---------------|-----------|
-| Access as a Greenplum user proxied by the Kerberos principal (the Kerberos principal is the Hadoop proxy user and accesses Hadoop as the Greenplum user) | true | Kerberos principal | Perform the [Configuration Procedure](#procedure) in this topic. | Set the Kerberos principal as the Hadoop proxy user as described in [Configure Hadoop Proxying](pxfuserimpers.html#hadoop). |
-| NOT VALID | true | \<custom> |  | |
-| Access as the Kerberos principal (access from any Greenplum user appears as coming from the Kerberos principal on the Hadoop side) | false | Kerberos principal | Perform the [Configuration Procedure](#procedure.html) in this topic, and then turn off user impersonation as described in [Configure PXF User Impersonation](pxfuserimpers.html#pxf_cfg_impers). | None required. |
-| Access as a \<custom> user (for example, `hive`) (the Kerberos principal is the Hadoop proxy user and access from any Greenplum user appears as coming from the \<custom> user on the Hadoop side) | false | \<custom> | Perform the [Configuration Procedure](#procedure) in this topic, turn off user impersonation as described in [Configure PXF User Impersonation](pxfuserimpers.html#pxf_cfg_impers), and [Configure the Hadoop User](pxfuserimpers.html#pxf_cfg_user) to the \<custom> user name. | Set the Kerberos principal as the Hadoop proxy user as described in [Configure Hadoop Proxying](pxfuserimpers.html#hadoop). |
+### <a id="principal_proxy"></a>Access as a Greenplum user proxied by the Kerberos principal
 
+In this configuration PXF will access Hadoop as the Greenplum user proxied
+by the Kerberos principal. The Kerberos principal is the Hadoop proxy user and
+accesses Hadoop as the Greenplum user.
+
+| Impersonation  | Service&nbsp;User |  PXF Configuration | Hadoop&nbsp;Configuration&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
+|----------------|-------------------|--------------------|-----------|
+|  true          | Kerberos principal | Perform the [Configuration Procedure](#procedure) in this topic. | Set the Kerberos principal as the Hadoop proxy user as described in [Configure Hadoop Proxying](pxfuserimpers.html#hadoop). |
+
+### <a id="principal_hadoop"></a>Access as the Kerberos principal
+
+In this configuration PXF will access as the Kerberos principal. Access from
+any Greenplum user appears as coming from the Kerberos principal on the Hadoop
+side.
+
+| Impersonation  | Service&nbsp;User |  PXF Configuration | Hadoop&nbsp;Configuration&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
+|----------------|-------------------|--------------------|-----------|
+|  false         | Kerberos principal | Perform the [Configuration Procedure](#procedure.html) in this topic, and then turn off user impersonation as described in [Configure PXF User Impersonation](pxfuserimpers.html#pxf_cfg_impers). | None required. |
+
+### <a id="custom_hadoop"></a>Access as a \<custom> user
+
+In this configuration PXF will access as a \<custom> user (for example, `hive`).
+The Kerberos principal is the Hadoop proxy user and access from any Greenplum
+user appears as coming from the \<custom> user on the Hadoop side.
+
+| Impersonation  | Service&nbsp;User |  PXF Configuration | Hadoop&nbsp;Configuration&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
+|----------------|-------------------|--------------------|-----------|
+|  false         |  \<custom>        | Perform the [Configuration Procedure](#procedure) in this topic, turn off user impersonation as described in [Configure PXF User Impersonation](pxfuserimpers.html#pxf_cfg_impers), and [Configure the Hadoop User](pxfuserimpers.html#pxf_cfg_user) to the \<custom> user name. | Set the Kerberos principal as the Hadoop proxy user as described in [Configure Hadoop Proxying](pxfuserimpers.html#hadoop). |
+
+**Note**: PXF does not support accessing a Kerberos-secured Hadoop cluster
+with a \<custom> user impersonating Greenplum users. The Kerberos principal
+must be used when impersonating Greenplum users.
 
 ## <a id="procedure"></a>Procedure
 
