@@ -88,12 +88,12 @@ public class ParquetWriteTest {
         context.setConfig("fakeConfig");
         context.setServerName("fakeServerName");
         context.setUser("fakeUser");
-        context.setProfileScheme("localfile");
         context.setSegmentId(4);
         context.setRequestType(RequestContext.RequestType.WRITE_BRIDGE);
         context.setTupleDescription(columnDescriptors);
 
         configuration = new Configuration();
+        configuration.set("pxf.fs.basePath", "/");
 
         when(mockConfigurationFactory.
                 initConfiguration(context.getConfig(), context.getServerName(), context.getUser(), context.getAdditionalConfigProps()))
@@ -218,7 +218,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -268,7 +268,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -320,7 +320,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -374,7 +374,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -424,7 +424,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -479,7 +479,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -529,7 +529,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -580,7 +580,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -630,7 +630,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -682,7 +682,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -733,7 +733,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -786,7 +786,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -852,7 +852,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile);
@@ -922,7 +922,7 @@ public class ParquetWriteTest {
         accessor.closeForWrite();
 
         // Validate write
-        Path expectedFile = new Path(HcfsType.LOCALFILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
+        Path expectedFile = new Path(HcfsType.FILE.getUriForWrite(configuration, context, true) + ".snappy.parquet");
         assertTrue(expectedFile.getFileSystem(configuration).exists(expectedFile));
 
         MessageType schema = validateFooter(expectedFile, 5, 3);

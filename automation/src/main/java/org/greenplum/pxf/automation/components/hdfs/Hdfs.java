@@ -185,7 +185,7 @@ public class Hdfs extends BaseSystemObject implements IFSFunctionality {
     public ArrayList<String> list(String path) throws Exception {
         ReportUtils.startLevel(report, getClass(), "List From " + path);
         RemoteIterator<LocatedFileStatus> list = fs.listFiles(getDatapath(path), true);
-        ArrayList<String> filesList = new ArrayList<String>();
+        ArrayList<String> filesList = new ArrayList<>();
         while (list.hasNext()) {
             filesList.add(list.next().getPath().toString());
         }
@@ -527,7 +527,11 @@ public class Hdfs extends BaseSystemObject implements IFSFunctionality {
         this.workingDirectory = workingDirectory;
 
         if (workingDirectory != null) {
-            this.workingDirectory = workingDirectory.replace("__UUID__", UUID.randomUUID().toString());
+            String basePath = getBasePath();
+
+            this.workingDirectory = workingDirectory
+                    .replace("${base.path}", basePath)
+                    .replace("__UUID__", UUID.randomUUID().toString());
         }
     }
 
@@ -545,6 +549,10 @@ public class Hdfs extends BaseSystemObject implements IFSFunctionality {
 
     public void setHadoopRoot(String hadoopRoot) {
         this.hadoopRoot = hadoopRoot;
+    }
+
+    public String getBasePath() {
+        return StringUtils.defaultIfBlank(System.getenv("BASE_PATH"), "");
     }
 
     public String getTestKerberosPrincipal() {

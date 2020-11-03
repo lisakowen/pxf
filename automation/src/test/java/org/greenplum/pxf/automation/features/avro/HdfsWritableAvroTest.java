@@ -103,20 +103,12 @@ public class HdfsWritableAvroTest extends BaseFeature {
     public void generateSchemaPrimitive() throws Exception {
         gpdbTable = "writable_avro_primitive_generate_schema";
         fullTestPath = hdfsPath + "generate_schema_primitive_types";
-        exTable = new WritableExternalTable(gpdbTable + "_writable", AVRO_PRIMITIVE_WRITABLE_TABLE_COLS, fullTestPath, "custom");
-        exTable.setHost(pxfHost);
-        exTable.setPort(pxfPort);
-        exTable.setFormatter("pxfwritable_export");
-        exTable.setProfile(protocol.value() + ":avro");
+        prepareWritableExternalTable(gpdbTable, AVRO_PRIMITIVE_WRITABLE_TABLE_COLS, fullTestPath);
         exTable.setUserParameters(new String[]{"COMPRESSION_CODEC=xz"});
 
-        readableExternalTable = new ReadableExternalTable(gpdbTable + "_readable", AVRO_PRIMITIVE_READABLE_TABLE_COLS, fullTestPath, "custom");
-        readableExternalTable.setHost(pxfHost);
-        readableExternalTable.setPort(pxfPort);
-        readableExternalTable.setFormatter("pxfwritable_import");
-        readableExternalTable.setProfile(protocol.value() + ":avro");
-        gpdb.createTableAndVerify(readableExternalTable);
+        prepareReadableExternalTable(gpdbTable, AVRO_PRIMITIVE_READABLE_TABLE_COLS, fullTestPath);
 
+        gpdb.createTableAndVerify(readableExternalTable);
         gpdb.createTableAndVerify(exTable);
 
         insertPrimitives(gpdbTable);
@@ -134,20 +126,12 @@ public class HdfsWritableAvroTest extends BaseFeature {
     public void generateSchemaPrimitive_withNoCompression() throws Exception {
         gpdbTable = "writable_avro_primitive_no_compression";
         fullTestPath = hdfsPath + "generate_schema_primitive_types_with_no_compression";
-        exTable = new WritableExternalTable(gpdbTable + "_writable", AVRO_PRIMITIVE_WRITABLE_TABLE_COLS, fullTestPath, "custom");
-        exTable.setHost(pxfHost);
-        exTable.setPort(pxfPort);
-        exTable.setFormatter("pxfwritable_export");
-        exTable.setProfile(protocol.value() + ":avro");
+        prepareWritableExternalTable(gpdbTable, AVRO_PRIMITIVE_WRITABLE_TABLE_COLS, fullTestPath);
         exTable.setUserParameters(new String[]{"COMPRESSION_CODEC=uncompressed"});
 
-        readableExternalTable = new ReadableExternalTable(gpdbTable + "_readable", AVRO_PRIMITIVE_READABLE_TABLE_COLS, fullTestPath, "custom");
-        readableExternalTable.setHost(pxfHost);
-        readableExternalTable.setPort(pxfPort);
-        readableExternalTable.setFormatter("pxfwritable_import");
-        readableExternalTable.setProfile(protocol.value() + ":avro");
-        gpdb.createTableAndVerify(readableExternalTable);
+        prepareReadableExternalTable(gpdbTable, AVRO_PRIMITIVE_READABLE_TABLE_COLS, fullTestPath);
 
+        gpdb.createTableAndVerify(readableExternalTable);
         gpdb.createTableAndVerify(exTable);
 
         insertPrimitives(gpdbTable);
@@ -166,20 +150,12 @@ public class HdfsWritableAvroTest extends BaseFeature {
         gpdbTable = "writable_avro_complex_generate_schema";
         createComplexTypes();
         fullTestPath = hdfsPath + "generate_schema_complex_types";
-        exTable = new WritableExternalTable(gpdbTable + "_writable", AVRO_COMPLEX_TABLE_COLS_WRITABLE, fullTestPath, "custom");
-        exTable.setHost(pxfHost);
-        exTable.setPort(pxfPort);
-        exTable.setFormatter("pxfwritable_export");
-        exTable.setProfile(protocol.value() + ":avro");
+        prepareWritableExternalTable(gpdbTable, AVRO_COMPLEX_TABLE_COLS_WRITABLE, fullTestPath);
         exTable.setUserParameters(new String[]{"COMPRESSION_CODEC=bzip2"});
 
-        readableExternalTable = new ReadableExternalTable(gpdbTable + "_readable", AVRO_COMPLEX_TABLE_COLS_READABLE, fullTestPath, "custom");
-        readableExternalTable.setHost(pxfHost);
-        readableExternalTable.setPort(pxfPort);
-        readableExternalTable.setFormatter("pxfwritable_import");
-        readableExternalTable.setProfile(protocol.value() + ":avro");
-        gpdb.createTableAndVerify(readableExternalTable);
+        prepareReadableExternalTable(gpdbTable, AVRO_COMPLEX_TABLE_COLS_READABLE, fullTestPath);
 
+        gpdb.createTableAndVerify(readableExternalTable);
         gpdb.createTableAndVerify(exTable);
 
         insertComplex(gpdbTable);
@@ -197,18 +173,10 @@ public class HdfsWritableAvroTest extends BaseFeature {
     public void userProvidedSchemaFileOnHcfsPrimitive() throws Exception {
         gpdbTable = "writable_avro_primitive_user_provided_schema_on_hcfs";
         fullTestPath = hdfsPath + "primitive_user_provided_schema_on_hcfs";
-        exTable = new WritableExternalTable(gpdbTable + "_writable", AVRO_PRIMITIVE_WRITABLE_TABLE_COLS, fullTestPath, "custom");
-        exTable.setHost(pxfHost);
-        exTable.setPort(pxfPort);
-        exTable.setFormatter("pxfwritable_export");
-        exTable.setProfile(protocol.value() + ":avro");
+        prepareWritableExternalTable(gpdbTable, AVRO_PRIMITIVE_WRITABLE_TABLE_COLS, fullTestPath);
         exTable.setUserParameters(new String[]{"COMPRESSION_CODEC=snappy"});
 
-        readableExternalTable = new ReadableExternalTable(gpdbTable + "_readable", AVRO_PRIMITIVE_READABLE_TABLE_COLS, fullTestPath, "custom");
-        readableExternalTable.setHost(pxfHost);
-        readableExternalTable.setPort(pxfPort);
-        readableExternalTable.setFormatter("pxfwritable_import");
-        readableExternalTable.setProfile(protocol.value() + ":avro");
+        prepareReadableExternalTable(gpdbTable, AVRO_PRIMITIVE_READABLE_TABLE_COLS, fullTestPath);
         gpdb.createTableAndVerify(readableExternalTable);
 
         String schemaPath = hdfsPath.replaceFirst("/$", "_schema/primitives_no_union.avsc");
@@ -236,23 +204,13 @@ public class HdfsWritableAvroTest extends BaseFeature {
         createComplexTypes();
         gpdbTable = "writable_avro_complex_user_schema_on_classpath";
         fullTestPath = hdfsPath + "complex_user_schema_on_classpath";
-        exTable = new WritableExternalTable(gpdbTable + "_writable",
+        prepareWritableExternalTable(gpdbTable,
                 AVRO_COMPLEX_TABLE_COLS_WRITABLE,
-                fullTestPath,
-                "custom");
-        exTable.setHost(pxfHost);
-        exTable.setPort(pxfPort);
-        exTable.setFormatter("pxfwritable_export");
-        exTable.setProfile(protocol.value() + ":avro");
+                fullTestPath);
 
-        readableExternalTable = new ReadableExternalTable(gpdbTable + "_readable",
+        prepareReadableExternalTable(gpdbTable,
                 AVRO_COMPLEX_TABLE_COLS_READABLE,
-                fullTestPath,
-                "custom");
-        readableExternalTable.setHost(pxfHost);
-        readableExternalTable.setPort(pxfPort);
-        readableExternalTable.setFormatter("pxfwritable_import");
-        readableExternalTable.setProfile(protocol.value() + ":avro");
+                fullTestPath);
         gpdb.createTableAndVerify(readableExternalTable);
 
         // copy a schema file to PXF's classpath on cluster that has no UNION types, just the raw underlying types.
@@ -285,19 +243,11 @@ public class HdfsWritableAvroTest extends BaseFeature {
         gpdbTable = "writable_avro_null_values";
         createComplexTypes();
         fullTestPath = hdfsPath + "null_values";
-        exTable = new WritableExternalTable(gpdbTable + "_writable", AVRO_COMPLEX_TABLE_COLS_WRITABLE, fullTestPath, "custom");
-        exTable.setHost(pxfHost);
-        exTable.setPort(pxfPort);
-        exTable.setFormatter("pxfwritable_export");
-        exTable.setProfile(protocol.value() + ":avro");
+        prepareWritableExternalTable(gpdbTable, AVRO_COMPLEX_TABLE_COLS_WRITABLE, fullTestPath);
 
-        readableExternalTable = new ReadableExternalTable(gpdbTable + "_readable", AVRO_COMPLEX_TABLE_COLS_READABLE, fullTestPath, "custom");
-        readableExternalTable.setHost(pxfHost);
-        readableExternalTable.setPort(pxfPort);
-        readableExternalTable.setFormatter("pxfwritable_import");
-        readableExternalTable.setProfile(protocol.value() + ":avro");
+        prepareReadableExternalTable(gpdbTable, AVRO_COMPLEX_TABLE_COLS_READABLE, fullTestPath);
+
         gpdb.createTableAndVerify(readableExternalTable);
-
         gpdb.createTableAndVerify(exTable);
 
         insertComplexWithNulls(gpdbTable);
@@ -389,7 +339,9 @@ public class HdfsWritableAvroTest extends BaseFeature {
         addJsonNodesToMap(jsonToCompare, resourcePath + compareFile);
 
         // for HCFS on Cloud, wait a bit for async write in previous steps to finish
-        sleep(10000);
+        if (protocol != ProtocolEnum.HDFS && protocol != ProtocolEnum.FILE) {
+            sleep(10000);
+        }
         for (String srcPath : hdfs.list(fullTestPath)) {
             final String fileName = "file_" + cnt++;
             final String filePath = publicStage + fileName;
@@ -450,5 +402,27 @@ public class HdfsWritableAvroTest extends BaseFeature {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void prepareWritableExternalTable(String name, String[] fields, String path) {
+        exTable = new WritableExternalTable(name + "_writable",
+                fields,
+                protocol.getExternalTablePath(hdfs.getBasePath(), path),
+                "custom");
+        exTable.setHost(pxfHost);
+        exTable.setPort(pxfPort);
+        exTable.setFormatter("pxfwritable_export");
+        exTable.setProfile(protocol.value() + ":avro");
+    }
+
+    private void prepareReadableExternalTable(String name, String[] fields, String path) {
+        readableExternalTable = new ReadableExternalTable(name + "_readable",
+                fields,
+                protocol.getExternalTablePath(hdfs.getBasePath(), path),
+                "custom");
+        readableExternalTable.setHost(pxfHost);
+        readableExternalTable.setPort(pxfPort);
+        readableExternalTable.setFormatter("pxfwritable_import");
+        readableExternalTable.setProfile(protocol.value() + ":avro");
     }
 }

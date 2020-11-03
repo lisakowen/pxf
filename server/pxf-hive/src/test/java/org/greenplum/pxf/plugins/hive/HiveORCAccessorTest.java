@@ -31,9 +31,10 @@ import org.greenplum.pxf.plugins.hdfs.utilities.HdfsUtilities;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Arrays;
+import java.util.Properties;
 
 import static org.apache.hadoop.hive.ql.io.sarg.ConvertAstToSearchArg.SARG_PUSHDOWN;
+import static org.greenplum.pxf.plugins.hive.utilities.HiveUtilities.serializeProperties;
 import static org.junit.Assert.assertEquals;
 
 public class HiveORCAccessorTest {
@@ -43,13 +44,16 @@ public class HiveORCAccessorTest {
 
     @Before
     public void setup() throws Exception {
-        HiveUserData userData = new HiveUserData("", "", null, HiveDataFragmenter.HIVE_NO_PART_TBL, true, "1", "", 0, Arrays.asList(new Integer[]{0, 1}), "col1,FOO", "string, string");
+        Properties properties = new Properties();
+        properties.put("columns", "");
+
         context = new RequestContext();
         context.setConfig("default");
         context.setUser("test-user");
         context.setDataSource("foo");
+        context.setProfileScheme("localfile");
         context.setFragmentMetadata(HdfsUtilities.prepareFragmentMetadata(0, 0, new String[]{"localhost"}));
-        context.setFragmentUserData(userData.toString().getBytes());
+        context.setFragmentUserData(serializeProperties(properties));
         context.getTupleDescription().add(new ColumnDescriptor("col1", 1, 1, "TEXT", null));
         context.getTupleDescription().add(new ColumnDescriptor("FOO", 1, 1, "TEXT", null));
         context.setAccessor(HiveORCAccessor.class.getName());

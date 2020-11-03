@@ -27,6 +27,7 @@ import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.InvalidInputException;
 import org.apache.hadoop.mapred.JobConf;
 import org.greenplum.pxf.api.model.BaseFragmenter;
+import org.greenplum.pxf.api.model.ConfigurationFactory;
 import org.greenplum.pxf.api.model.Fragment;
 import org.greenplum.pxf.api.model.FragmentStats;
 import org.greenplum.pxf.api.model.RequestContext;
@@ -50,6 +51,13 @@ public class HdfsDataFragmenter extends BaseFragmenter {
 
     protected JobConf jobConf;
     protected HcfsType hcfsType;
+
+    public HdfsDataFragmenter() {
+    }
+
+    HdfsDataFragmenter(ConfigurationFactory configurationFactory) {
+        this.configurationFactory = configurationFactory;
+    }
 
     @Override
     public void initialize(RequestContext context) {

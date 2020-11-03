@@ -36,6 +36,7 @@ groups:
   - Test PXF-GP[[gp_ver]]-HDP3-SECURE AMBARI (MANUAL) on RHEL7
   - Test PXF-GP[[gp_ver]]-HDP2-JDK11 on RHEL7
   - Test PXF-GP[[gp_ver]]-CDH on RHEL7
+  - Test PXF-GP[[gp_ver]]-FILE-NO-IMPERS on RHEL7
   - Test PXF-GP[[gp_ver]]-S3 on RHEL7
   - Test PXF-GP[[gp_ver]]-S3-NO-IMPERS on RHEL7
   - Test PXF-GP[[gp_ver]]-ADL-NO-IMPERS on RHEL7
@@ -79,6 +80,7 @@ groups:
   - Test PXF-GP[[gp_ver]]-HDP3-SECURE AMBARI (MANUAL) on RHEL7
   - Test PXF-GP[[gp_ver]]-HDP2-JDK11 on RHEL7
   - Test PXF-GP[[gp_ver]]-CDH on RHEL7
+  - Test PXF-GP[[gp_ver]]-FILE-NO-IMPERS on RHEL7
   - Test PXF-GP[[gp_ver]]-S3 on RHEL7
   - Test PXF-GP[[gp_ver]]-S3-NO-IMPERS on RHEL7
   - Test PXF-GP[[gp_ver]]-ADL-NO-IMPERS on RHEL7
@@ -260,21 +262,17 @@ resources:
 
 ## ---------- RelEng Drop Artifacts ----------
 - name: pxf_gp5_rhel6_release_to_releng
-  type: s3
+  type: gcs
   source:
-    access_key_id: ((bucket-access-key-id))
     bucket: ((pxf-releng-gp5-drop-bucket))
-    region_name: ((aws-region))
-    secret_access_key: ((bucket-secret-access-key))
+    json_key: ((concourse-gcs-resources-service-account-key))
     regexp: ((pxf-releng-gp5-drop-path))/pxf-gp5-(.*)-2.el6.x86_64.rpm
 
 - name: pxf_gp5_rhel7_release_to_releng
-  type: s3
+  type: gcs
   source:
-    access_key_id: ((bucket-access-key-id))
     bucket: ((pxf-releng-gp5-drop-bucket))
-    region_name: ((aws-region))
-    secret_access_key: ((bucket-secret-access-key))
+    json_key: ((concourse-gcs-resources-service-account-key))
     regexp: ((pxf-releng-gp5-drop-path))/pxf-gp5-(.*)-2.el7.x86_64.rpm
 
 - name: pxf_gp6_rhel7_release_to_releng
@@ -304,6 +302,21 @@ resources:
     bucket: ((pxf-releng-odp-drop-bucket))
     json_key: ((concourse-gcs-resources-service-account-key))
     regexp: ((pxf-releng-odp-drop-path))/((pxf-odp-file-prefix))-(.*)-ODP.tar.gz
+
+## ---------- RelEng Drop Artifacts for tarballs ----------
+- name: pxf_gp5_tarball_release_to_releng
+  type: gcs
+  source:
+    bucket: ((pxf-releng-gp6-drop-bucket))
+    json_key: ((concourse-gcs-resources-service-account-key))
+    regexp: ((pxf-releng-gp5-drop-path))/pxf-(.*).tar.gz
+
+- name: pxf_gp6_tarball_release_to_releng
+  type: gcs
+  source:
+    bucket: ((pxf-releng-gp6-drop-bucket))
+    json_key: ((concourse-gcs-resources-service-account-key))
+    regexp: ((pxf-releng-gp6-drop-path))/pxf-(.*).tar.gz
 
 ## ---------- PXF ShipIt resources ----------
 - name: pxf_shipit_file
@@ -905,6 +918,98 @@ jobs:
       TARGET_OS: centos
       TARGET_OS_VERSION: 7
 
+## ---------- FILE tests -----------------
+
+- name: Test PXF-GP[[gp_ver]]-FILE-NO-IMPERS on RHEL7
+  max_in_flight: 2
+  plan:
+  - in_parallel:
+    - get: pxf_src
+      passed: [Testing Gate for PXF-GP]
+      trigger: true
+    - get: pxf_tarball
+      resource: pxf_gp[[gp_ver]]_tarball_rhel7
+      passed: [Testing Gate for PXF-GP]
+    - get: gpdb_package
+      resource: gpdb[[gp_ver]]_rhel7_rpm_latest-0
+      passed: [Testing Gate for PXF-GP]
+    - get: gpdb[[gp_ver]]-pxf-dev-centos7-image
+    - get: ccp_src
+    - get: ccp-7-image
+    - get: pxf-automation-dependencies
+    - get: singlecluster
+      resource: singlecluster-hdp2
+  - put: terraform_gpdb
+    resource: terraform
+    params:
+      action: create
+      delete_on_failure: true
+      generate_random_name: true
+      terraform_source: ccp_src/google/
+      vars:
+        PLATFORM: centos7
+        number_of_nodes: ((number_of_gpdb_nodes))
+        segments_per_host: 4
+        instance_type: n1-standard-4
+        ccp_reap_minutes: 60
+  - task: Generate Greenplum Cluster
+    input_mapping:
+      gpdb_rpm: gpdb_package
+      terraform: terraform_gpdb
+    file: ccp_src/ci/tasks/gen_cluster.yml
+    image: ccp-7-image
+    params:
+      AWS_ACCESS_KEY_ID: ((tf-machine-access-key-id))
+      AWS_SECRET_ACCESS_KEY: ((tf-machine-secret-access-key))
+      AWS_DEFAULT_REGION: ((aws-region))
+      BUCKET_PATH: ((tf-bucket-path))
+      BUCKET_NAME: ((tf-bucket-name))
+      PLATFORM: centos7
+      CLOUD_PROVIDER: google
+      GPDB_RPM: true
+  - task: Initialize Greenplum
+    file: ccp_src/ci/tasks/gpinitsystem.yml
+  - task: Setup NFS
+    input_mapping:
+      terraform: terraform_gpdb
+    file: pxf_src/concourse/tasks/install_nfs_on_ccp.yml
+    image: ccp-7-image
+    params:
+      BASE_PATH: /mnt/nfs/var/nfsshare
+  - task: Setup PXF
+    input_mapping:
+      terraform: terraform_gpdb
+    file: pxf_src/concourse/tasks/install_pxf_on_ccp.yml
+    image: ccp-7-image
+    params:
+      GP_VER: [[gp_ver]]
+      IMPERSONATION: true
+      INSTALL_GPHDFS: false
+      PXF_JVM_OPTS: ((pxf-jvm-opts))
+      SKIP_HADOOP_SETUP: true
+  - task: Test PXF-GP[[gp_ver]]-FILE-NO-IMPERS on RHEL7
+    on_success:
+      do:
+      - put: terraform_gpdb
+        resource: terraform
+        params:
+          action: destroy
+          env_name_file: terraform_gpdb/name
+          terraform_source: ccp_src/google/
+        get_params:
+          action: destroy
+    privileged: true
+    file: pxf_src/concourse/tasks/test_pxf_on_ccp.yml
+    image: gpdb[[gp_ver]]-pxf-dev-centos7-image
+    params:
+      BASE_PATH: /mnt/nfs/var/nfsshare
+      GP_VER: [[gp_ver]]
+      GROUP: hcfs
+      IMPERSONATION: false
+      PROTOCOL: file
+      TARGET_OS: centos
+      TARGET_OS_VERSION: 7
+
 ## ---------- HCFS Cloud tests ----------
 
 - name: Test PXF-GP[[gp_ver]]-S3 on RHEL7
@@ -1300,6 +1405,7 @@ jobs:
       - Test PXF-GP[[gp_ver]]-HDP3 on RHEL7
       - Test PXF-GP[[gp_ver]]-HDP2-JDK11 on RHEL7
       - Test PXF-GP[[gp_ver]]-CDH on RHEL7
+      - Test PXF-GP[[gp_ver]]-FILE-NO-IMPERS on RHEL7
       - Test PXF-GP[[gp_ver]]-S3 on RHEL7
       - Test PXF-GP[[gp_ver]]-S3-NO-IMPERS on RHEL7
       - Test PXF-GP[[gp_ver]]-ADL-NO-IMPERS on RHEL7
@@ -1326,6 +1432,7 @@ jobs:
       - Test PXF-GP[[gp_ver]]-HDP3 on RHEL7
       - Test PXF-GP[[gp_ver]]-HDP2-JDK11 on RHEL7
       - Test PXF-GP[[gp_ver]]-CDH on RHEL7
+      - Test PXF-GP[[gp_ver]]-FILE-NO-IMPERS on RHEL7
       - Test PXF-GP[[gp_ver]]-S3 on RHEL7
       - Test PXF-GP[[gp_ver]]-S3-NO-IMPERS on RHEL7
       - Test PXF-GP[[gp_ver]]-ADL-NO-IMPERS on RHEL7
@@ -1563,6 +1670,18 @@ jobs:
     params:
       GP_VER: 6
       TARGET_OS_VERSION: ubuntu18.04
+  - task: Generate PXF binary tarball from PXF-GP5 on RHEL6 RPM
+    file: pxf_src/concourse/tasks/generate_tarball_from_rpm.yml
+    image: rpmrebuild-centos6-image
+    params:
+      GP_VER: 5
+      TARGET_OS_VERSION: 6
+  - task: Generate PXF binary tarball from PXF-GP6 on RHEL7 RPM
+    file: pxf_src/concourse/tasks/generate_tarball_from_rpm.yml
+    image: rpmrebuild-centos7-image
+    params:
+      GP_VER: 6
+      TARGET_OS_VERSION: 7
   - task: Generate Releng Email
     image: google-cloud-sdk-slim-image
     file: pxf_src/concourse/tasks/generate_releng_email.yml
@@ -1590,6 +1709,12 @@ jobs:
     - put: pxf_gp6_ubuntu18_release_to_releng
       params:
         file: pxf_artifacts/licensed/pxf-gp6-*-2-ubuntu18.04-amd64.deb
+    - put: pxf_gp5_tarball_release_to_releng
+      params:
+        file: pxf_artifacts/licensed/gp5/pxf-*.tar.gz
+    - put: pxf_gp6_tarball_release_to_releng
+      params:
+        file: pxf_artifacts/licensed/gp6/pxf-*.tar.gz
     - put: pxf_odp_to_releng
       params:
         file: pxf_artifacts/((pxf-odp-file-prefix))*.tar.gz

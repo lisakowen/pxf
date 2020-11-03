@@ -3,6 +3,8 @@ package org.greenplum.pxf.automation.features.hcfs;
 import org.greenplum.pxf.automation.features.BaseFeature;
 import org.greenplum.pxf.automation.structures.tables.basic.Table;
 import org.greenplum.pxf.automation.structures.tables.utils.TableFactory;
+import org.greenplum.pxf.automation.utils.system.ProtocolEnum;
+import org.greenplum.pxf.automation.utils.system.ProtocolUtils;
 import org.testng.annotations.Test;
 
 /**
@@ -90,7 +92,7 @@ public class HcfsGlobbingTest extends BaseFeature {
 
     @Test(groups = {"gpdb", "hcfs", "security"})
     public void testJavaRegexSpecialChars() throws Exception {
-        prepareTestScenario("java_regex_special_chars", "($.|+)bc", "abc", null, null, "($.|+)*");
+        prepareTestScenario("java_regex_special_chars", "(.|+)bc", "abc", null, null, "(.|+)*");
         runTestScenario("java_regex_special_chars");
     }
 
@@ -114,11 +116,14 @@ public class HcfsGlobbingTest extends BaseFeature {
         prepareTableData(path, data3, "3c");
         prepareTableData(path, data4, "4d");
 
+        ProtocolEnum protocol = ProtocolUtils.getProtocol();
+
         // Create GPDB external table directed to the HDFS file
         exTable = TableFactory.getPxfReadableTextTable(
                 "hcfs_glob_" + testName,
                 FIELDS,
-                hdfs.getWorkingDirectory() + "/" + path + "/" + glob, ",");
+                protocol.getExternalTablePath(hdfs.getBasePath(), hdfs.getWorkingDirectory()) + "/" + path + "/" + glob,
+                ",");
         exTable.setHost(pxfHost);
         exTable.setPort(pxfPort);
         gpdb.createTableAndVerify(exTable);

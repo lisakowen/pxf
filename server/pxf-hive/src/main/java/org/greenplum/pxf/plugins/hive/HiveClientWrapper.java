@@ -11,9 +11,7 @@ import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.MetaException;
-import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.thrift.TException;
 import org.greenplum.pxf.api.UnsupportedTypeException;
@@ -26,7 +24,6 @@ import org.greenplum.pxf.plugins.hive.utilities.HiveUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -34,10 +31,14 @@ import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Properties;
 
+import static org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.FILE_OUTPUT_FORMAT;
+import static org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_LOCATION;
 import static org.greenplum.pxf.api.model.ConfigurationFactory.PXF_CONFIG_RESOURCE_PATH_PROPERTY;
+import static org.greenplum.pxf.plugins.hive.HiveDataFragmenter.HIVE_PARTITIONS_DELIM;
+import static org.greenplum.pxf.plugins.hive.HiveDataFragmenter.PXF_META_TABLE_PARTITION_COLUMN_VALUES;
+import static org.greenplum.pxf.plugins.hive.utilities.HiveUtilities.serializeProperties;
 
 public class HiveClientWrapper {
 
@@ -46,7 +47,6 @@ public class HiveClientWrapper {
     private static final Logger LOG = LoggerFactory.getLogger(HiveClientWrapper.class);
 
     private static final String WILDCARD = "*";
-    private static final int DEFAULT_DELIMITER_CODE = 44;
 
     private static final String STR_RC_FILE_INPUT_FORMAT = "org.apache.hadoop.hive.ql.io.RCFileInputFormat";
     private static final String STR_TEXT_FILE_INPUT_FORMAT = "org.apache.hadoop.mapred.TextInputFormat";
@@ -147,43 +147,25 @@ public class HiveClientWrapper {
      *
      * @param fragmenterClassName fragmenter class name
      * @param partData            partition data
-     * @param filterInFragmenter  whether filtering was done in fragmenter
-     * @param hiveIndexes         the list of indices that we will retrieve from the Hive schema columns
-     * @param allColumnNames      the comma-separated list of column names defined in hive table
-     * @param allColumnTypes      the comma-separated list of column types defined in hive table
      * @return serialized representation of fragment-related attributes
-     * @throws Exception when error occurred during serialization
+     * @throws ClassNotFoundException when the fragmenter class is not found
      */
-    public byte[] makeUserData(String fragmenterClassName,
-                               HiveTablePartition partData,
-                               boolean filterInFragmenter,
-                               List<Integer> hiveIndexes,
-                               String allColumnNames,
-                               String allColumnTypes) throws Exception {
-
-        HiveUserData hiveUserData;
+    public byte[] makeUserData(String fragmenterClassName, HiveTablePartition partData)
+            throws ClassNotFoundException {
 
         if (fragmenterClassName == null) {
             throw new IllegalArgumentException("No fragmenter provided.");
         }
 
         Class<?> fragmenterClass = Class.forName(fragmenterClassName);
-
-        String inputFormatName = partData.storageDesc.getInputFormat();
-        String serdeClassName = partData.storageDesc.getSerdeInfo().getSerializationLib();
-        String propertiesString = serializeProperties(partData.properties);
-        String partitionKeys = serializePartitionKeys(partData);
-        String delimiter = getDelimiterCode(partData.storageDesc).toString();
-        String colTypes = partData.properties.getProperty("columns.types");
-        int skipHeader = Integer.parseInt(partData.properties.getProperty("skip.header.line.count", "0"));
-
         if (HiveInputFormatFragmenter.class.isAssignableFrom(fragmenterClass)) {
-            assertFileType(inputFormatName, partData);
+            assertFileType(partData.storageDesc.getInputFormat(), partData);
         }
 
-        hiveUserData = new HiveUserData(inputFormatName, serdeClassName, propertiesString, partitionKeys, filterInFragmenter, delimiter, colTypes, skipHeader, hiveIndexes, allColumnNames, allColumnTypes);
-
-        return hiveUserData.toString().getBytes();
+        Properties properties = partData.properties;
+        addPartitionValuesInformation(properties, partData);
+        removeUnusedProperties(properties);
+        return serializeProperties(properties);
     }
 
     /**
@@ -317,70 +299,24 @@ public class HiveClientWrapper {
         return hiveConf;
     }
 
-    /* Turns a Properties class into a string */
-    private String serializeProperties(Properties props) throws Exception {
-        ByteArrayOutputStream outStream = new ByteArrayOutputStream();
-        props.store(outStream, ""/* comments */);
-        return outStream.toString();
-    }
-
-    /* Turns the partition keys into a string */
-    private String serializePartitionKeys(HiveTablePartition partData) {
-        if (partData.partition == null) {
-            /* this is a simple hive table - there are no partitions */
-            return HiveDataFragmenter.HIVE_NO_PART_TBL;
+    /* Turns the partition values into a string and adds them to the properties */
+    private void addPartitionValuesInformation(Properties properties, HiveTablePartition partData) {
+        if (partData.partition != null) {
+            properties.put(PXF_META_TABLE_PARTITION_COLUMN_VALUES,
+                    String.join(HIVE_PARTITIONS_DELIM, partData.partition.getValues()));
         }
-
-        StringBuilder partitionKeys = new StringBuilder();
-        String prefix = "";
-        ListIterator<String> valsIter = partData.partition.getValues().listIterator();
-        ListIterator<FieldSchema> keysIter = partData.partitionKeys.listIterator();
-        while (valsIter.hasNext() && keysIter.hasNext()) {
-            FieldSchema key = keysIter.next();
-            String name = key.getName();
-            String type = key.getType();
-            String val = valsIter.next();
-            String oneLevel = prefix + name + HiveDataFragmenter.HIVE_1_PART_DELIM + type
-                    + HiveDataFragmenter.HIVE_1_PART_DELIM + val;
-            partitionKeys.append(oneLevel);
-            prefix = HiveDataFragmenter.HIVE_PARTITIONS_DELIM;
-        }
-
-        return partitionKeys.toString();
     }
 
     /**
-     * The method which extracts field delimiter from storage descriptor.
-     * When unable to extract delimiter from storage descriptor, default value is used
-     *
-     * @param sd StorageDescriptor of table/partition
-     * @return ASCII code of delimiter
+     * Removes properties that are not used by PXF or Hive's serde
      */
-    public Integer getDelimiterCode(StorageDescriptor sd) {
-        Integer delimiterCode;
-
-        String delimiter = getSerdeParameter(sd, serdeConstants.FIELD_DELIM);
-        if (delimiter != null) {
-            delimiterCode = (int) delimiter.charAt(0);
-            return delimiterCode;
-        }
-
-        delimiter = getSerdeParameter(sd, serdeConstants.SERIALIZATION_FORMAT);
-        if (delimiter != null) {
-            delimiterCode = Integer.parseInt(delimiter);
-            return delimiterCode;
-        }
-
-        return DEFAULT_DELIMITER_CODE;
-    }
-
-    private String getSerdeParameter(StorageDescriptor sd, String parameterKey) {
-        String parameterValue = null;
-        if (sd != null && sd.getSerdeInfo() != null && sd.getSerdeInfo().getParameters() != null && sd.getSerdeInfo().getParameters().get(parameterKey) != null) {
-            parameterValue = sd.getSerdeInfo().getParameters().get(parameterKey);
-        }
-
-        return parameterValue;
+    private void removeUnusedProperties(Properties properties) {
+        properties.remove(META_TABLE_LOCATION);
+        properties.remove(FILE_OUTPUT_FORMAT);
+        properties.remove("columns.comments");
+        properties.remove("transient_lastDdlTime");
+        properties.remove("last_modified_time");
+        properties.remove("last_modified_by");
     }
 
     /*

@@ -22,14 +22,12 @@ package org.greenplum.pxf.plugins.hive;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.serde.serdeConstants;
-import org.apache.hadoop.mapred.JobConf;
-import org.greenplum.pxf.api.io.DataType;
-import org.greenplum.pxf.api.model.RequestContext;
 import org.greenplum.pxf.api.utilities.ColumnDescriptor;
 import org.greenplum.pxf.plugins.hive.utilities.HiveUtilities;
 
 import java.util.Properties;
-import java.util.stream.Collectors;
+
+import static org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_COLUMN_TYPES;
 
 /**
  * Specialized HiveResolver for a Hive table stored as RC file.
@@ -37,45 +35,23 @@ import java.util.stream.Collectors;
  */
 public class HiveORCSerdeResolver extends HiveResolver {
     private static final Log LOG = LogFactory.getLog(HiveORCSerdeResolver.class);
-    private String serdeType;
-    private String typesString;
 
-    /* read the data supplied by the fragmenter: inputformat name, serde name, partition keys */
     @Override
-    void parseUserData(RequestContext input) {
-        HiveUserData hiveUserData = HiveUtilities.parseHiveUserData(input);
-        serdeType = hiveUserData.getSerdeClassName();
-        partitionKeys = hiveUserData.getPartitionKeys();
-        typesString = hiveUserData.getColTypes();
-        collectionDelim = input.getOption("COLLECTION_DELIM") == null ? COLLECTION_DELIM
-                : input.getOption("COLLECTION_DELIM");
-        mapkeyDelim = input.getOption("MAPKEY_DELIM") == null ? MAPKEY_DELIM
-                : input.getOption("MAPKEY_DELIM");
-        hiveIndexes = hiveUserData.getHiveIndexes();
-    }
-
-    /*
-     * Get and init the deserializer for the records of this Hive data fragment.
-     * Suppress Warnings added because deserializer.initialize is an abstract function that is deprecated
-     * but its implementations (ColumnarSerDe, LazyBinaryColumnarSerDe) still use the deprecated interface.
-     */
-    @SuppressWarnings("deprecation")
-    @Override
-    void initSerde(RequestContext input) throws Exception {
-        Properties serdeProperties = new Properties();
-        int numberOfDataColumns = input.getColumns() - getNumberOfPartitions();
+    protected Properties getSerdeProperties() {
+        int numberOfDataColumns = context.getColumns() - getNumberOfPartitions();
 
         LOG.debug("Serde number of columns is " + numberOfDataColumns);
 
+        Properties properties = super.getSerdeProperties();
         StringBuilder columnNames = new StringBuilder(numberOfDataColumns * 2); // column + delimiter
         StringBuilder columnTypes = new StringBuilder(numberOfDataColumns * 2); // column + delimiter
-        String[] cols = typesString.split(":");
+        String[] cols = properties.getProperty(META_TABLE_COLUMN_TYPES).split(":");
         String[] hiveColTypes = new String[cols.length];
         parseColTypes(cols, hiveColTypes);
 
         String delim = ",";
-        for (int j = 0; j < input.getTupleDescription().size(); j++) {
-            ColumnDescriptor column = input.getColumn(j);
+        for (int j = 0; j < context.getTupleDescription().size(); j++) {
+            ColumnDescriptor column = context.getColumn(j);
             Integer i = hiveIndexes.get(j);
             if (i == null) continue;
 
@@ -92,11 +68,9 @@ public class HiveORCSerdeResolver extends HiveResolver {
             columnNames.append(columnName);
             columnTypes.append(columnType);
         }
-        serdeProperties.put(serdeConstants.LIST_COLUMNS, columnNames.toString());
-        serdeProperties.put(serdeConstants.LIST_COLUMN_TYPES, columnTypes.toString());
-
-        deserializer = HiveUtilities.createDeserializer(serdeType);
-        deserializer.initialize(new JobConf(configuration, HiveORCSerdeResolver.class), serdeProperties);
+        properties.put(serdeConstants.LIST_COLUMNS, columnNames.toString());
+        properties.put(serdeConstants.LIST_COLUMN_TYPES, columnTypes.toString());
+        return properties;
     }
 
     private void parseColTypes(String[] cols, String[] output) {

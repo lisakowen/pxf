@@ -1,15 +1,11 @@
 package org.greenplum.pxf.automation;
 
-import java.io.File;
-import java.lang.reflect.Method;
-
 import jsystem.framework.report.ListenerstManager;
 import jsystem.framework.sut.SutFactory;
 import jsystem.framework.system.SystemManagerImpl;
 import jsystem.framework.system.SystemObject;
 import jsystem.utils.FileUtils;
 import listeners.CustomAutomationLogger;
-
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -27,8 +23,10 @@ import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Listeners;
-
 import reporters.CustomAutomationReport;
+
+import java.io.File;
+import java.lang.reflect.Method;
 
 /**
  * PXF Automation tests Base class, using {@link CustomAutomationLogger} testNG listener for custom
@@ -332,7 +330,9 @@ public abstract class BaseTestParent {
         hdfs.removeDirectory(hdfs.getWorkingDirectory());
         hdfs.createDirectory(hdfs.getWorkingDirectory());
         if (gpdb.getUserName() != null) {
-            hdfs.setOwner("/" + hdfs.getWorkingDirectory(), gpdb.getUserName(), gpdb.getUserName());
+            hdfs.setOwner("/" + StringUtils.removeStart(hdfs.getWorkingDirectory(), "/"),
+                    gpdb.getUserName(),
+                    gpdb.getUserName());
         }
     }
 

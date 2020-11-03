@@ -35,4 +35,16 @@
         </description>
     </property>
     -->
+
+    <!--
+    <property>
+        <name>pxf.fs.basePath</name>
+        <value></value>
+        <description>
+            Sets the base path when constructing a file URI for read and write
+            operations. This property MUST be configured for any server that
+            accesses a file using a file:* profile.
+        </description>
+    </property>
+    !-->
 </configuration>

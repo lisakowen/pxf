@@ -3,6 +3,7 @@ package org.greenplum.pxf.automation.features.hcfs;
 
 import org.greenplum.pxf.automation.features.BaseFeature;
 import org.greenplum.pxf.automation.structures.tables.pxf.ReadableExternalTable;
+import org.greenplum.pxf.automation.utils.system.ProtocolEnum;
 import org.greenplum.pxf.automation.utils.system.ProtocolUtils;
 import org.testng.annotations.Test;
 
@@ -41,9 +42,10 @@ public class HcfsTextTest extends BaseFeature {
     private void runTestScenario(String name, String[] fields, String srcPath, String hdfsPath, String delimiter, String escape) throws Exception {
         hdfs.copyFromLocal(srcPath, hdfsPath);
 
+        ProtocolEnum protocol = ProtocolUtils.getProtocol();
         String tableName = "hcfs_text_" + name;
-        exTable = new ReadableExternalTable(tableName, fields, hdfsPath, "TEXT");
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":text");
+        exTable = new ReadableExternalTable(tableName, fields, protocol.getExternalTablePath(hdfs.getBasePath(), hdfsPath), "TEXT");
+        exTable.setProfile(protocol.value() + ":text");
 
         if (delimiter != null) {
             exTable.setDelimiter(delimiter);

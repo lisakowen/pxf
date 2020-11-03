@@ -1,17 +1,16 @@
 package org.greenplum.pxf.automation.features.hdfs;
 
-import java.io.File;
-
 import org.greenplum.pxf.automation.components.cluster.PhdCluster;
+import org.greenplum.pxf.automation.datapreparer.CustomSequencePreparer;
+import org.greenplum.pxf.automation.features.BaseFeature;
 import org.greenplum.pxf.automation.structures.tables.basic.Table;
 import org.greenplum.pxf.automation.structures.tables.pxf.ReadableExternalTable;
 import org.greenplum.pxf.automation.utils.fileformats.FileFormatsUtils;
+import org.greenplum.pxf.automation.utils.system.ProtocolEnum;
 import org.greenplum.pxf.automation.utils.system.ProtocolUtils;
-import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
-import org.greenplum.pxf.automation.datapreparer.CustomSequencePreparer;
-import org.greenplum.pxf.automation.features.BaseFeature;
+import java.io.File;
 
 /**
  * Collection of Test cases for PXF ability to read SequenceFile.
@@ -61,7 +60,7 @@ public class HdfsReadableSequenceTest extends BaseFeature {
             "short3 smallint",
             "short4 smallint",
             "short5 smallint",
-            "bt    bytea" };
+            "bt    bytea"};
 
     @Override
     protected void beforeClass() throws Exception {
@@ -97,20 +96,7 @@ public class HdfsReadableSequenceTest extends BaseFeature {
                 (hdfsPath + writableInsideSequenceFileName));
     }
 
-    @BeforeMethod(alwaysRun = true)
-    public void setUp() throws Exception {
-
-        // default external table with common settings
-        exTable = new ReadableExternalTable("writable_in_sequence", null, "",
-                "custom");
-        exTable.setHost(pxfHost);
-        exTable.setPort(pxfPort);
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":SequenceFile");
-        exTable.setFormatter("pxfwritable_import");
-    }
-
     /**
-     *
      * Test Writable data inside a SequenceFile (read only).
      *
      * @throws Exception
@@ -118,9 +104,18 @@ public class HdfsReadableSequenceTest extends BaseFeature {
     @Test(groups = {"features", "gpdb", "hcfs", "security"})
     public void readSequenceFile() throws Exception {
 
+        ProtocolEnum protocol = ProtocolUtils.getProtocol();
+
+        // default external table with common settings
+        exTable = new ReadableExternalTable("writable_in_sequence", null, "",
+                "custom");
+        exTable.setHost(pxfHost);
+        exTable.setPort(pxfPort);
+        exTable.setProfile(protocol.value() + ":SequenceFile");
+        exTable.setFormatter("pxfwritable_import");
         exTable.setFields(customWritableFields);
         exTable.setDataSchema(schemaPackage + customSchemaFileName);
-        exTable.setPath(hdfsPath + writableInsideSequenceFileName);
+        exTable.setPath(protocol.getExternalTablePath(hdfs.getBasePath(), hdfsPath + writableInsideSequenceFileName));
 
         gpdb.createTableAndVerify(exTable);
 

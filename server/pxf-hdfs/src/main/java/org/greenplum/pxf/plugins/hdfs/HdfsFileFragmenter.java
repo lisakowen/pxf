@@ -4,6 +4,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.InvalidInputException;
+import org.greenplum.pxf.api.model.ConfigurationFactory;
 import org.greenplum.pxf.api.model.Fragment;
 import org.greenplum.pxf.plugins.hdfs.utilities.PxfInputFormat;
 
@@ -18,6 +19,13 @@ import java.util.stream.Collectors;
  * at the storage layer.
  */
 public class HdfsFileFragmenter extends HdfsDataFragmenter {
+
+    public HdfsFileFragmenter() {
+    }
+
+    HdfsFileFragmenter(ConfigurationFactory configurationFactory) {
+        super(configurationFactory);
+    }
 
     /**
      * Gets the fragments for a data source URI that can appear as a file name,

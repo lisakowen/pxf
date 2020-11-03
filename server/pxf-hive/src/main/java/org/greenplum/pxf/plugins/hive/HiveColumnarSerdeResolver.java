@@ -20,8 +20,6 @@ package org.greenplum.pxf.plugins.hive;
  */
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -49,16 +47,13 @@ import org.greenplum.pxf.api.model.OutputFormat;
 import org.greenplum.pxf.api.model.RequestContext;
 import org.greenplum.pxf.api.utilities.ColumnDescriptor;
 import org.greenplum.pxf.api.utilities.Utilities;
-import org.greenplum.pxf.plugins.hive.utilities.HiveUtilities;
 
-import java.io.IOException;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -72,26 +67,16 @@ import static org.greenplum.pxf.api.io.DataType.VARCHAR;
  * Use together with HiveInputFormatFragmenter/HiveRCFileAccessor.
  */
 public class HiveColumnarSerdeResolver extends HiveResolver {
-    private static final Log LOG = LogFactory.getLog(HiveColumnarSerdeResolver.class);
     private boolean firstColumn;
     private StringBuilder builder;
-    private String serdeType;
-    private String allColumnNames;
-    private String allColumnTypes;
-    private Map<String, String[]> partitionColumnNames;
-    
+    private Map<String, HivePartition> partitionColumnNames;
+
     /* read the data supplied by the fragmenter: inputformat name, serde name, partition keys */
     @Override
-    void parseUserData(RequestContext input) {
-        HiveUserData hiveUserData = HiveUtilities.parseHiveUserData(input);
-
+    void parseUserData(RequestContext context) {
+        super.parseUserData(context);
         partitionColumnNames = new HashMap<>();
-        serdeType = hiveUserData.getSerdeClassName();
-        partitionKeys = hiveUserData.getPartitionKeys();
-        hiveIndexes = hiveUserData.getHiveIndexes();
-        allColumnNames = hiveUserData.getAllColumnNames();
-        allColumnTypes = hiveUserData.getAllColumnTypes();
-        parseDelimiterChar(input);
+        parseDelimiterChar(context);
     }
 
     @Override
@@ -109,15 +94,9 @@ public class HiveColumnarSerdeResolver extends HiveResolver {
      */
     @Override
     void initTextPartitionFields(StringBuilder parts) {
-        if (partitionKeys.equals(HiveDataFragmenter.HIVE_NO_PART_TBL)) {
-            return;
-        }
-
-        String[] partitionLevels = partitionKeys.split(HiveDataFragmenter.HIVE_PARTITIONS_DELIM);
-        for (String partLevel : partitionLevels) {
-            String[] levelKey = partLevel.split(HiveDataFragmenter.HIVE_1_PART_DELIM);
-            partitionColumnNames.put(StringUtils.lowerCase(levelKey[0]), levelKey);
-        }
+        partitionColumnNames = metadata.getPartitions().stream()
+                .collect(Collectors.toMap(partition -> StringUtils.lowerCase(partition.getName()),
+                        partition -> partition));
     }
 
     /**
@@ -139,20 +118,13 @@ public class HiveColumnarSerdeResolver extends HiveResolver {
         }
     }
 
-    /*
-     * Get and init the deserializer for the records of this Hive data fragment.
-     * Suppress Warnings added because deserializer.initialize is an abstract function that is deprecated
-     * but its implementations (ColumnarSerDe, LazyBinaryColumnarSerDe) still use the deprecated interface.
-     */
-    @SuppressWarnings("deprecation")
     @Override
-    void initSerde(RequestContext input) throws Exception {
-        Properties serdeProperties = new Properties();
+    protected JobConf getJobConf() {
         StringBuilder projectedColumnNames = new StringBuilder();
         StringBuilder projectedColumnIds = new StringBuilder();
 
         String delim = ",";
-        List<ColumnDescriptor> tupleDescription = input.getTupleDescription();
+        List<ColumnDescriptor> tupleDescription = context.getTupleDescription();
         for (int i = 0; i < tupleDescription.size(); i++) {
             ColumnDescriptor column = tupleDescription.get(i);
             if (column.isProjected() && hiveIndexes.get(i) != null) {
@@ -164,16 +136,11 @@ public class HiveColumnarSerdeResolver extends HiveResolver {
                 projectedColumnIds.append(hiveIndexes.get(i));
             }
         }
-        serdeProperties.put(serdeConstants.LIST_COLUMNS, allColumnNames);
-        serdeProperties.put(serdeConstants.LIST_COLUMN_TYPES, allColumnTypes);
-
-        JobConf jobConf = new JobConf(configuration, HiveColumnarSerdeResolver.class);
+        JobConf jobConf = super.getJobConf();
         jobConf.set(READ_ALL_COLUMNS, "false");
         jobConf.set(READ_COLUMN_IDS_CONF_STR, projectedColumnIds.toString());
         jobConf.set(READ_COLUMN_NAMES_CONF_STR, projectedColumnNames.toString());
-
-        deserializer = HiveUtilities.createDeserializer(serdeType);
-        deserializer.initialize(jobConf, serdeProperties);
+        return jobConf;
     }
 
     /**
@@ -184,7 +151,7 @@ public class HiveColumnarSerdeResolver extends HiveResolver {
      * <p/>
      * Any other category will throw UnsupportedTypeException
      */
-    private void traverseTuple(Object obj, ObjectInspector objInspector) throws IOException, BadRecordException {
+    private void traverseTuple(Object obj, ObjectInspector objInspector) throws BadRecordException {
         ObjectInspector.Category category = objInspector.getCategory();
         if ((obj == null) && (category != ObjectInspector.Category.PRIMITIVE)) {
             throw new BadRecordException("NULL Hive composite object");
@@ -212,19 +179,17 @@ public class HiveColumnarSerdeResolver extends HiveResolver {
                     String lowercaseColumnName = StringUtils.lowerCase(columnDescriptor.columnName());
                     Integer i = columnNameToStructIndexMap.get(lowercaseColumnName);
                     Integer structIndex = hiveIndexes.get(j);
-                    String[] levelKey;
+                    HivePartition partition;
 
-                    if ((levelKey = partitionColumnNames.get(lowercaseColumnName)) != null) {
+                    if ((partition = partitionColumnNames.get(lowercaseColumnName)) != null) {
                         // Skip partitioned columns
-                        String type = levelKey[1];
-                        String val = levelKey[2];
-                        addPartitionColumn(type, val);
+                        addPartitionColumn(partition.getType(), partition.getValue());
                     } else if (!columnDescriptor.isProjected()) {
                         // Non-projected fields will be sent as null values.
                         // This case is invoked only in the top level of fields and
                         // not when interpreting fields of type struct.
                         traverseTuple(null, fields.get(i).getFieldObjectInspector());
-                    } else if (structIndex < list.size()){
+                    } else if (structIndex < list.size()) {
                         traverseTuple(list.get(structIndex), fields.get(i).getFieldObjectInspector());
                     } else {
                         traverseTuple(null, fields.get(i).getFieldObjectInspector());
@@ -292,7 +257,7 @@ public class HiveColumnarSerdeResolver extends HiveResolver {
         firstColumn = false;
     }
 
-    private void resolvePrimitive(Object o, PrimitiveObjectInspector oi) throws IOException {
+    private void resolvePrimitive(Object o, PrimitiveObjectInspector oi) {
 
         if (!firstColumn) {
             builder.append(delimiter);

@@ -61,11 +61,9 @@ import org.greenplum.pxf.api.model.Resolver;
 import org.greenplum.pxf.api.utilities.ColumnDescriptor;
 import org.greenplum.pxf.api.utilities.Utilities;
 import org.greenplum.pxf.plugins.hdfs.utilities.HdfsUtilities;
-import org.greenplum.pxf.plugins.hive.utilities.HiveUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Date;
@@ -78,23 +76,27 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_LIB;
+
 /**
  * Class HiveResolver handles deserialization of records that were serialized
  * using Hadoop's Hive serialization framework.
  */
 public class HiveResolver extends HivePlugin implements Resolver {
+
     private static final Logger LOG = LoggerFactory.getLogger(HiveResolver.class);
+
     protected static final String MAPKEY_DELIM = ":";
     protected static final String COLLECTION_DELIM = ",";
     protected static final String nullChar = "\\N";
+
     protected char delimiter;
     protected String collectionDelim;
     protected String mapkeyDelim;
     protected Deserializer deserializer;
     protected String serdeClassName;
-    protected String propsString;
-    protected String partitionKeys;
     protected List<Integer> hiveIndexes;
+    protected HiveMetadata metadata;
 
     private int numberOfPartitions;
     private Map<String, OneField> partitionColumnNames;
@@ -105,18 +107,17 @@ public class HiveResolver extends HivePlugin implements Resolver {
      * obtaining the serde class name, the serde properties string and the
      * partition keys.
      *
-     * @param requestContext request context
+     * @param context request context
      */
     @Override
-    public void initialize(RequestContext requestContext) {
-        super.initialize(requestContext);
-
+    public void initialize(RequestContext context) {
+        super.initialize(context);
         hiveDefaultPartName = HiveConf.getVar(configuration, HiveConf.ConfVars.DEFAULTPARTITIONNAME);
 
         try {
             parseUserData(context);
             initPartitionFields();
-            initSerde(context);
+            initSerde();
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize HiveResolver", e);
         }
@@ -145,38 +146,31 @@ public class HiveResolver extends HivePlugin implements Resolver {
         return numberOfPartitions;
     }
 
-    /* Parses user data string (arrived from fragmenter). */
-    void parseUserData(RequestContext input) throws Exception {
-        HiveUserData hiveUserData = HiveUtilities.parseHiveUserData(input);
-
-        serdeClassName = hiveUserData.getSerdeClassName();
-        propsString = hiveUserData.getPropertiesString();
-        partitionKeys = hiveUserData.getPartitionKeys();
-
-        collectionDelim = input.getOption("COLLECTION_DELIM") == null ? COLLECTION_DELIM
-                : input.getOption("COLLECTION_DELIM");
-        mapkeyDelim = input.getOption("MAPKEY_DELIM") == null ? MAPKEY_DELIM
-                : input.getOption("MAPKEY_DELIM");
-        hiveIndexes = hiveUserData.getHiveIndexes();
+    /* Parses user data string (received from fragmenter). */
+    void parseUserData(RequestContext context) {
+        // HiveMetadata is passed from accessor
+        metadata = (HiveMetadata) context.getMetadata();
+        if (metadata == null) {
+            throw new RuntimeException("No hive metadata detected in request context");
+        }
+        collectionDelim = StringUtils.defaultString(context.getOption("COLLECTION_DELIM"), COLLECTION_DELIM);
+        mapkeyDelim = StringUtils.defaultString(context.getOption("MAPKEY_DELIM"), MAPKEY_DELIM);
+        hiveIndexes = metadata.getHiveIndexes();
+        serdeClassName = metadata.getProperties().getProperty(SERIALIZATION_LIB);
     }
 
     /*
      * Gets and init the deserializer for the records of this Hive data
      * fragment.
      */
-    void initSerde(RequestContext requestContext) throws Exception {
-        Properties serdeProperties;
-
+    void initSerde() throws Exception {
         Class<?> c = Class.forName(serdeClassName, true, JavaUtils.getClassLoader());
         deserializer = (Deserializer) c.getDeclaredConstructor().newInstance();
-        serdeProperties = new Properties();
-        if (propsString != null) {
-            ByteArrayInputStream inStream = new ByteArrayInputStream(propsString.getBytes());
-            serdeProperties.load(inStream);
-        } else {
-            throw new IllegalArgumentException("propsString is mandatory to initialize serde.");
-        }
-        deserializer.initialize(new JobConf(configuration, HiveResolver.class), serdeProperties);
+        deserializer.initialize(getJobConf(), getSerdeProperties());
+    }
+
+    protected JobConf getJobConf() {
+        return new JobConf(configuration, this.getClass());
     }
 
     /*
@@ -185,16 +179,17 @@ public class HiveResolver extends HivePlugin implements Resolver {
      */
     void initPartitionFields() {
         partitionColumnNames = new HashMap<>();
-        if (partitionKeys.equals(HiveDataFragmenter.HIVE_NO_PART_TBL)) {
+
+        List<HivePartition> hivePartitionList = metadata.getPartitions();
+        if (hivePartitionList == null || hivePartitionList.size() == 0) {
+            // no partition column information
             return;
         }
 
-        String[] partitionLevels = partitionKeys.split(HiveDataFragmenter.HIVE_PARTITIONS_DELIM);
-        for (String partLevel : partitionLevels) {
-            String[] levelKey = partLevel.split(HiveDataFragmenter.HIVE_1_PART_DELIM);
-            String columnName = StringUtils.lowerCase(levelKey[0]);
-            String type = levelKey[1];
-            String val = levelKey[2];
+        for (HivePartition partition : hivePartitionList) {
+            String columnName = partition.getName();
+            String type = partition.getType();
+            String val = partition.getValue();
             DataType convertedType;
             Object convertedValue;
             boolean isDefaultPartition;
@@ -273,16 +268,11 @@ public class HiveResolver extends HivePlugin implements Resolver {
             }
 
             if (columnDescriptorContainsColumn(columnName)) {
-                partitionColumnNames.put(columnName, new OneField(convertedType.getOID(), convertedValue));
+                partitionColumnNames.put(StringUtils.lowerCase(columnName),
+                        new OneField(convertedType.getOID(), convertedValue));
             }
         }
         numberOfPartitions = partitionColumnNames.size();
-    }
-
-    private boolean columnDescriptorContainsColumn(String columnName) {
-        return context.getTupleDescription()
-                .stream()
-                .anyMatch(cd -> columnName.equals(cd.columnName()));
     }
 
     /*
@@ -290,14 +280,13 @@ public class HiveResolver extends HivePlugin implements Resolver {
      * by the fragmenter.
      */
     void initTextPartitionFields(StringBuilder parts) {
-        if (partitionKeys.equals(HiveDataFragmenter.HIVE_NO_PART_TBL)) {
+        List<HivePartition> hivePartitionList = metadata.getPartitions();
+        if (hivePartitionList == null || hivePartitionList.size() == 0) {
             return;
         }
-        String[] partitionLevels = partitionKeys.split(HiveDataFragmenter.HIVE_PARTITIONS_DELIM);
-        for (String partLevel : partitionLevels) {
-            String[] levelKey = partLevel.split(HiveDataFragmenter.HIVE_1_PART_DELIM);
-            String type = levelKey[1];
-            String val = levelKey[2];
+        for (HivePartition partition : hivePartitionList) {
+            String type = partition.getType();
+            String val = partition.getValue();
             parts.append(delimiter);
             if (isDefaultPartition(type, val)) {
                 parts.append(nullChar);
@@ -347,7 +336,7 @@ public class HiveResolver extends HivePlugin implements Resolver {
                 }
             }
         }
-        this.numberOfPartitions = partitionLevels.length;
+        this.numberOfPartitions = hivePartitionList.size();
     }
 
     /**
@@ -679,42 +668,46 @@ public class HiveResolver extends HivePlugin implements Resolver {
         String userDelim = input.getGreenplumCSV().getDelimiter() != null ?
                 String.valueOf(input.getGreenplumCSV().getDelimiter()) : null;
 
-        if (userDelim == null) {
-            /* No DELIMITER in URL, try to get it from fragment's user data*/
-            HiveUserData hiveUserData = HiveUtilities.parseHiveUserData(input);
-            if (hiveUserData.getDelimiter() == null) {
-                throw new IllegalArgumentException("DELIMITER is a required option");
-            }
-            delimiter = (char) Integer.valueOf(hiveUserData.getDelimiter()).intValue();
-        } else {
-            final int VALID_LENGTH = 1;
-            final int VALID_LENGTH_HEX = 4;
-            if (userDelim.startsWith("\\x")) { // hexadecimal sequence
-                if (userDelim.length() != VALID_LENGTH_HEX) {
-                    throw new IllegalArgumentException(
-                            "Invalid hexdecimal value for delimiter (got"
-                                    + userDelim + ")");
-                }
-                delimiter = (char) Integer.parseInt(
-                        userDelim.substring(2, VALID_LENGTH_HEX), 16);
-                if (!CharUtils.isAscii(delimiter)) {
-                    throw new IllegalArgumentException(
-                            "Invalid delimiter value. Must be a single ASCII character, or a hexadecimal sequence (got non ASCII "
-                                    + delimiter + ")");
-                }
-                return;
-            }
-            if (userDelim.length() != VALID_LENGTH) {
+        if (userDelim == null)
+            return;
+
+        final int VALID_LENGTH = 1;
+        final int VALID_LENGTH_HEX = 4;
+        if (userDelim.startsWith("\\x")) { // hexadecimal sequence
+            if (userDelim.length() != VALID_LENGTH_HEX) {
                 throw new IllegalArgumentException(
-                        "Invalid delimiter value. Must be a single ASCII character, or a hexadecimal sequence (got "
+                        "Invalid hexdecimal value for delimiter (got"
                                 + userDelim + ")");
             }
-            if (!CharUtils.isAscii(userDelim.charAt(0))) {
+            delimiter = (char) Integer.parseInt(
+                    userDelim.substring(2, VALID_LENGTH_HEX), 16);
+            if (!CharUtils.isAscii(delimiter)) {
                 throw new IllegalArgumentException(
                         "Invalid delimiter value. Must be a single ASCII character, or a hexadecimal sequence (got non ASCII "
-                                + userDelim + ")");
+                                + delimiter + ")");
             }
-            delimiter = userDelim.charAt(0);
+            return;
         }
+        if (userDelim.length() != VALID_LENGTH) {
+            throw new IllegalArgumentException(
+                    "Invalid delimiter value. Must be a single ASCII character, or a hexadecimal sequence (got "
+                            + userDelim + ")");
+        }
+        if (!CharUtils.isAscii(userDelim.charAt(0))) {
+            throw new IllegalArgumentException(
+                    "Invalid delimiter value. Must be a single ASCII character, or a hexadecimal sequence (got non ASCII "
+                            + userDelim + ")");
+        }
+        delimiter = userDelim.charAt(0);
+    }
+
+    protected Properties getSerdeProperties() {
+        return metadata.getProperties();
+    }
+
+    private boolean columnDescriptorContainsColumn(String columnName) {
+        return context.getTupleDescription()
+                .stream()
+                .anyMatch(cd -> StringUtils.equalsIgnoreCase(columnName, cd.columnName()));
     }
 }

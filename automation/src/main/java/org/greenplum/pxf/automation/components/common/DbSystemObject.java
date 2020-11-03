@@ -145,7 +145,7 @@ public class DbSystemObject extends BaseSystemObject implements IDbFunctionality
 
 			int rowSize = row.size();
 			for (int j = 0; j < rowSize; j++) {
-				dataStringBuilder.append("E'" + row.get(j) + "'");
+				dataStringBuilder.append("E'").append(row.get(j)).append("'");
 				if (j != rowSize - 1) {
 					dataStringBuilder.append(",");
 				}

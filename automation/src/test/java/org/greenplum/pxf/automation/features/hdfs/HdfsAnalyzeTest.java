@@ -1,22 +1,23 @@
 package org.greenplum.pxf.automation.features.hdfs;
 
-import java.io.File;
-import java.sql.SQLException;
-import java.sql.SQLWarning;
-
 import org.greenplum.pxf.automation.components.cluster.PhdCluster;
+import org.greenplum.pxf.automation.datapreparer.CustomSequencePreparer;
+import org.greenplum.pxf.automation.datapreparer.CustomTextPreparer;
+import org.greenplum.pxf.automation.features.BaseFeature;
 import org.greenplum.pxf.automation.structures.tables.basic.Table;
 import org.greenplum.pxf.automation.structures.tables.utils.TableFactory;
 import org.greenplum.pxf.automation.utils.exception.ExceptionUtils;
 import org.greenplum.pxf.automation.utils.fileformats.FileFormatsUtils;
 import org.greenplum.pxf.automation.utils.jsystem.report.ReportUtils;
+import org.greenplum.pxf.automation.utils.system.ProtocolEnum;
+import org.greenplum.pxf.automation.utils.system.ProtocolUtils;
 import org.greenplum.pxf.automation.utils.tables.ComparisonUtils;
 import org.junit.Assert;
 import org.testng.annotations.Test;
 
-import org.greenplum.pxf.automation.datapreparer.CustomSequencePreparer;
-import org.greenplum.pxf.automation.datapreparer.CustomTextPreparer;
-import org.greenplum.pxf.automation.features.BaseFeature;
+import java.io.File;
+import java.sql.SQLException;
+import java.sql.SQLWarning;
 
 /**
  * PXF on HDFS Analyze tests:
@@ -655,6 +656,8 @@ public class HdfsAnalyzeTest extends BaseFeature {
     @Test(groups = { "features", "gpdb", "hcfs", "security" })
     public void statsMaxFragmentsParameter() throws Exception {
 
+        ProtocolEnum protocol = ProtocolUtils.getProtocol();
+
         String csvPath1 = hdfs.getWorkingDirectory()
                 + "/analyze_check_max_fragments1.csv";
         String csvPath2 = hdfs.getWorkingDirectory()
@@ -673,7 +676,7 @@ public class HdfsAnalyzeTest extends BaseFeature {
         hdfs.writeTableToFile(csvPath3, dataTable, ",");
 
         exTable.setName("analyze_max_fragments");
-        exTable.setPath(csvPathAll);
+        exTable.setPath(protocol.getExternalTablePath(hdfs.getBasePath(), csvPathAll));
 
         exTable.setUserParameters(new String[] {
                 "STATS-MAX-FRAGMENTS=2",
@@ -702,6 +705,8 @@ public class HdfsAnalyzeTest extends BaseFeature {
     @Test(groups = { "features", "gpdb", "hcfs", "security" })
     public void statsSampleRatioParameter() throws Exception {
 
+        ProtocolEnum protocol = ProtocolUtils.getProtocol();
+
         String csvPath = hdfs.getWorkingDirectory()
                 + "/analyze_check_sample_ratio.csv";
 
@@ -712,7 +717,7 @@ public class HdfsAnalyzeTest extends BaseFeature {
         hdfs.writeTableToFile(csvPath, dataTable, ",");
 
         exTable.setName("analyze_sample_ratio");
-        exTable.setPath(csvPath);
+        exTable.setPath(protocol.getExternalTablePath(hdfs.getBasePath(), csvPath));
 
         exTable.setUserParameters(new String[] {
                 "STATS-MAX-FRAGMENTS=100",

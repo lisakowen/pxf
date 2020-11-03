@@ -214,7 +214,7 @@ public class JdbcAccessor extends JdbcBasePlugin implements Accessor {
         return true;
     }
 
-	/**
+     /**
      * writeNextObject() implementation
      *
      * If batchSize is not 0 or 1, add a tuple to the batch of statementWrite
@@ -278,7 +278,7 @@ public class JdbcAccessor extends JdbcBasePlugin implements Accessor {
                                 firstException = currentSqlException;
                             }
                             LOG.error(
-                                "A SQLException in a pool thread occured: " + currentSqlException.getClass() + " " + currentSqlException.getMessage()
+                                "A SQLException in a pool thread occurred: " + currentSqlException.getClass() + " " + currentSqlException.getMessage()
                             );
                         }
                     }
@@ -286,7 +286,7 @@ public class JdbcAccessor extends JdbcBasePlugin implements Accessor {
                         // This exception must have been caused by some thread execution error. However, there may be other exception (maybe of class SQLException) that happened in one of threads that were not examined yet. That is why we do not modify firstException
                         if (LOG.isDebugEnabled()) {
                             LOG.debug(
-                                "A runtime exception in a thread pool occured: " + e.getClass() + " " + e.getMessage()
+                                "A runtime exception in a thread pool occurred: " + e.getClass() + " " + e.getMessage()
                             );
                         }
                     }

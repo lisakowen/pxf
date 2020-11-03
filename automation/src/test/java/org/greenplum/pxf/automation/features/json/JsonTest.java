@@ -1,11 +1,11 @@
 package org.greenplum.pxf.automation.features.json;
 
-import org.greenplum.pxf.automation.structures.tables.pxf.ReadableExternalTable;
-import org.testng.annotations.BeforeMethod;
-import org.testng.annotations.Test;
-
+import org.apache.commons.lang.StringUtils;
 import org.greenplum.pxf.automation.features.BaseFeature;
+import org.greenplum.pxf.automation.structures.tables.pxf.ReadableExternalTable;
+import org.greenplum.pxf.automation.utils.system.ProtocolEnum;
 import org.greenplum.pxf.automation.utils.system.ProtocolUtils;
+import org.testng.annotations.Test;
 
 /**
  * Tests for Json plugin to read HDFS files in JSON format.
@@ -24,7 +24,7 @@ public class JsonTest extends BaseFeature {
     private final String FILENAME_BROKEN = "tweets-broken";
     private final String FILENAME_MISMATCHED_TYPES = "supported_primitive_mismatched_types";
 
-    private String[] tweetsFields = new String[]{
+    private final String[] tweetsFields = new String[]{
             "created_at text",
             "id bigint",
             "text text",
@@ -34,7 +34,7 @@ public class JsonTest extends BaseFeature {
             "\"coordinates.coordinates[1]\" float8",
     };
 
-    private String[] supportedPrimitiveFields = new String[]{
+    private final String[] supportedPrimitiveFields = new String[]{
             "type_int int",
             "type_bigint bigint",
             "type_smallint smallint",
@@ -76,16 +76,6 @@ public class JsonTest extends BaseFeature {
                 hdfsPath + FILENAME_MISMATCHED_TYPES + SUFFIX_JSON);
     }
 
-    @BeforeMethod(alwaysRun = true)
-    public void setUp() throws Exception {
-
-        // default external table with common settings
-        exTable = new ReadableExternalTable("jsonSimple", null, "", "custom");
-        exTable.setHost(pxfHost);
-        exTable.setPort(pxfPort);
-        exTable.setFormatter("pxfwritable_import");
-    }
-
     /**
      * Test simple json file
      *
@@ -93,14 +83,8 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security", "hcfs"})
     public void jsonSimple() throws Exception {
-
-        exTable.setName("jsontest_simple");
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
-        exTable.setPath(hdfsPath + FILENAME_SIMPLE + SUFFIX_JSON);
-        exTable.setFields(new String[]{"name text", "age int"});
-
+        prepareExternalTable("jsontest_simple", new String[]{"name text", "age int"}, hdfsPath + FILENAME_SIMPLE + SUFFIX_JSON, "custom");
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.simple.runTest");
     }
@@ -112,14 +96,8 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security", "hcfs"})
     public void jsonSupportedPrimitives() throws Exception {
-
-        exTable.setName("jsontest_supported_primitive_types");
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
-        exTable.setPath(hdfsPath + FILENAME_TYPES + SUFFIX_JSON);
-        exTable.setFields(supportedPrimitiveFields);
-
+        prepareExternalTable("jsontest_supported_primitive_types", supportedPrimitiveFields, hdfsPath + FILENAME_TYPES + SUFFIX_JSON, "custom");
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.supported_primitive_types.runTest");
     }
@@ -131,14 +109,8 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security", "hcfs"})
     public void jsonSupportedPrimitivesWithCsvWireFormat() throws Exception {
-
-        exTable = new ReadableExternalTable("jsontest_supported_primitive_types", supportedPrimitiveFields, hdfsPath + FILENAME_TYPES + SUFFIX_JSON, "CSV");
-        exTable.setHost(pxfHost);
-        exTable.setPort(pxfPort);
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
-
+        prepareExternalTable("jsontest_supported_primitive_types", supportedPrimitiveFields, hdfsPath + FILENAME_TYPES + SUFFIX_JSON, "CSV");
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.supported_primitive_types.runTest");
     }
@@ -152,15 +124,9 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security", "hcfs"})
     public void jsonPrettyPrint() throws Exception {
-
-        exTable.setName("jsontest_pretty_print");
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
-        exTable.setPath(hdfsPath + FILENAME_PRETTY_PRINT + SUFFIX_JSON);
-        exTable.setFields(tweetsFields);
+        prepareExternalTable("jsontest_pretty_print", tweetsFields, hdfsPath + FILENAME_PRETTY_PRINT + SUFFIX_JSON, "custom");
         exTable.setUserParameters(new String[]{"IDENTIFIER=created_at"});
-
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.pretty_print.runTest");
     }
@@ -173,15 +139,9 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security", "hcfs"})
     public void missingIdentifier() throws Exception {
-
-        exTable.setName("jsontest_missing_identifier");
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
-        exTable.setPath(hdfsPath + FILENAME_PRETTY_PRINT_W_DELETE + SUFFIX_JSON);
-        exTable.setFields(tweetsFields);
+        prepareExternalTable("jsontest_missing_identifier", tweetsFields, hdfsPath + FILENAME_PRETTY_PRINT_W_DELETE + SUFFIX_JSON, "custom");
         exTable.setUserParameters(new String[]{"IDENTIFIER=created_at"});
-
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.missing_identifier.runTest");
     }
@@ -194,17 +154,11 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security", "hcfs"})
     public void exceedsMaxSize() throws Exception {
-
-        exTable.setName("jsontest_max_size");
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
-        exTable.setPath(hdfsPath + FILENAME_PRETTY_PRINT + SUFFIX_JSON);
-        exTable.setFields(tweetsFields);
+        prepareExternalTable("jsontest_max_size", tweetsFields, hdfsPath + FILENAME_PRETTY_PRINT + SUFFIX_JSON, "custom");
         exTable.setUserParameters(new String[]{
                 "IDENTIFIER=created_at",
                 "MAXLENGTH=566"});
-
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.exceed_max_size.runTest");
     }
@@ -218,15 +172,9 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security", "hcfs"})
     public void malformedRecord() throws Exception {
-
-        exTable.setName("jsontest_malformed_record");
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
-        exTable.setPath(hdfsPath + FILENAME_BROKEN + SUFFIX_JSON);
-        exTable.setFields(tweetsFields);
+        prepareExternalTable("jsontest_malformed_record", tweetsFields, hdfsPath + FILENAME_BROKEN + SUFFIX_JSON, "custom");
         exTable.setUserParameters(new String[]{"IDENTIFIER=created_at"});
-
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.malformed_record.runTest");
     }
@@ -240,15 +188,9 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security"})
     public void malformedRecordWithCsvWireFormat() throws Exception {
-
-        exTable = new ReadableExternalTable("jsontest_malformed_record", tweetsFields, hdfsPath + FILENAME_BROKEN + SUFFIX_JSON, "CSV");
-        exTable.setHost(pxfHost);
-        exTable.setPort(pxfPort);
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
+        prepareExternalTable("jsontest_malformed_record", tweetsFields, hdfsPath + FILENAME_BROKEN + SUFFIX_JSON, "CSV");
         exTable.setUserParameters(new String[]{"IDENTIFIER=created_at"});
-
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.malformed_record_csv.runTest");
     }
@@ -261,17 +203,11 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security", "hcfs"})
     public void malformedRecordWithRejectLimit() throws Exception {
-
-        exTable.setName("jsontest_malformed_record_with_reject_limit");
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
-        exTable.setPath(hdfsPath + FILENAME_BROKEN + SUFFIX_JSON);
-        exTable.setFields(tweetsFields);
+        prepareExternalTable("jsontest_malformed_record_with_reject_limit", tweetsFields, hdfsPath + FILENAME_BROKEN + SUFFIX_JSON, "custom");
         exTable.setUserParameters(new String[]{"IDENTIFIER=created_at"});
         exTable.setSegmentRejectLimit(2);
         exTable.setErrorTable("true");
-
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.malformed_record_with_reject_limit.runTest");
     }
@@ -284,17 +220,11 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security", "hcfs"})
     public void malformedRecordWithRejectLimitWithCsvWireFormat() throws Exception {
-
-        exTable = new ReadableExternalTable("jsontest_malformed_record_with_reject_limit", tweetsFields, hdfsPath + FILENAME_BROKEN + SUFFIX_JSON, "CSV");
-        exTable.setHost(pxfHost);
-        exTable.setPort(pxfPort);
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
+        prepareExternalTable("jsontest_malformed_record_with_reject_limit", tweetsFields, hdfsPath + FILENAME_BROKEN + SUFFIX_JSON, "CSV");
         exTable.setUserParameters(new String[]{"IDENTIFIER=created_at"});
         exTable.setSegmentRejectLimit(2);
         exTable.setErrorTable("true");
-
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.malformed_record_with_reject_limit_csv.runTest");
     }
@@ -309,14 +239,8 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security", "hcfs"})
     public void mismatchedTypes() throws Exception {
-
-        exTable.setName("jsontest_mismatched_types");
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
-        exTable.setPath(hdfsPath + FILENAME_MISMATCHED_TYPES + SUFFIX_JSON);
-        exTable.setFields(supportedPrimitiveFields);
-
+        prepareExternalTable("jsontest_mismatched_types", supportedPrimitiveFields, hdfsPath + FILENAME_MISMATCHED_TYPES + SUFFIX_JSON, "custom");
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.mismatched_types.runTest");
     }
@@ -332,17 +256,23 @@ public class JsonTest extends BaseFeature {
      */
     @Test(groups = {"features", "gpdb", "security", "hcfs"})
     public void mismatchedTypesWithRejectLimit() throws Exception {
-
-        exTable.setName("jsontest_mismatched_types_with_reject_limit");
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":json");
-        exTable.setPath(hdfsPath + FILENAME_MISMATCHED_TYPES + SUFFIX_JSON);
-        exTable.setFields(supportedPrimitiveFields);
+        prepareExternalTable("jsontest_mismatched_types_with_reject_limit", supportedPrimitiveFields, hdfsPath + FILENAME_MISMATCHED_TYPES + SUFFIX_JSON, "custom");
         exTable.setSegmentRejectLimit(7);
         exTable.setErrorTable("true");
-
         gpdb.createTableAndVerify(exTable);
-
         // Verify results
         runTincTest("pxf.features.hdfs.readable.json.mismatched_types_with_reject_limit.runTest");
+    }
+
+    private void prepareExternalTable(String name, String[] fields, String path, String format) {
+        ProtocolEnum protocol = ProtocolUtils.getProtocol();
+        exTable = new ReadableExternalTable(name, fields,
+                protocol.getExternalTablePath(hdfs.getBasePath(), path), format);
+        exTable.setHost(pxfHost);
+        exTable.setPort(pxfPort);
+        if (StringUtils.equals(format, "custom")) {
+            exTable.setFormatter("pxfwritable_import");
+        }
+        exTable.setProfile(protocol.value() + ":json");
     }
 }

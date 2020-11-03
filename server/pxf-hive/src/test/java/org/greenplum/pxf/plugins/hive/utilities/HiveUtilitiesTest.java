@@ -26,11 +26,14 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 import java.util.Arrays;
+import java.util.Properties;
 
 import com.google.common.base.Joiner;
 
+import org.apache.hadoop.hive.serde.serdeConstants;
 import org.greenplum.pxf.api.io.DataType;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.greenplum.pxf.plugins.hive.HiveResolver;
 import org.junit.Test;
 import org.greenplum.pxf.api.model.Metadata;
 import org.greenplum.pxf.api.UnsupportedTypeException;
@@ -314,7 +317,7 @@ public class HiveUtilitiesTest {
     }
 
     @Test
-    public void mapHiveTypeComplex() throws Exception {
+    public void mapHiveTypeComplex() {
         /*
          * array<dataType> -> text
          * map<keyDataType, valueDataType> -> text

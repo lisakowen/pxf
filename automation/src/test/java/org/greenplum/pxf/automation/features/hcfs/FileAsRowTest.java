@@ -2,6 +2,7 @@ package org.greenplum.pxf.automation.features.hcfs;
 
 import org.greenplum.pxf.automation.features.BaseFeature;
 import org.greenplum.pxf.automation.structures.tables.pxf.ReadableExternalTable;
+import org.greenplum.pxf.automation.utils.system.ProtocolEnum;
 import org.greenplum.pxf.automation.utils.system.ProtocolUtils;
 import org.testng.annotations.Test;
 
@@ -126,8 +127,10 @@ public class FileAsRowTest extends BaseFeature {
         }
 
         String tableName = "file_as_row_" + name;
-        exTable = new ReadableExternalTable(tableName, fields, locationPath, "CSV");
-        exTable.setProfile(ProtocolUtils.getProtocol().value() + ":text:multi");
+
+        ProtocolEnum protocol = ProtocolUtils.getProtocol();
+        exTable = new ReadableExternalTable(tableName, fields, protocol.getExternalTablePath(hdfs.getBasePath(), locationPath), "CSV");
+        exTable.setProfile(protocol.value() + ":text:multi");
         exTable.setUserParameters(new String[]{"FILE_AS_ROW=true"});
         gpdb.createTableAndVerify(exTable);
 

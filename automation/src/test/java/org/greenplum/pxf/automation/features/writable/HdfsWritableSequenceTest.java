@@ -1,14 +1,18 @@
 package org.greenplum.pxf.automation.features.writable;
 
+import org.apache.commons.lang.StringUtils;
+import org.greenplum.pxf.automation.components.cluster.PhdCluster;
 import org.greenplum.pxf.automation.components.cluster.SingleCluster;
 import org.greenplum.pxf.automation.datapreparer.CustomSequencePreparer;
 import org.greenplum.pxf.automation.features.BaseWritableFeature;
 import org.greenplum.pxf.automation.structures.tables.basic.Table;
+import org.greenplum.pxf.automation.structures.tables.pxf.ReadableExternalTable;
+import org.greenplum.pxf.automation.structures.tables.pxf.WritableExternalTable;
 import org.greenplum.pxf.automation.structures.tables.utils.TableFactory;
 import org.greenplum.pxf.automation.utils.exception.ExceptionUtils;
 import org.greenplum.pxf.automation.utils.fileformats.FileFormatsUtils;
-import org.apache.commons.lang.StringUtils;
-import org.greenplum.pxf.automation.components.cluster.PhdCluster;
+import org.greenplum.pxf.automation.utils.system.ProtocolEnum;
+import org.greenplum.pxf.automation.utils.system.ProtocolUtils;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.postgresql.util.PSQLException;
@@ -29,12 +33,14 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
 
     private String hdfsPath;
 
-    private String schemaPackage = "org.greenplum.pxf.automation.dataschema.";
-    private String customSchemaFileName = "CustomWritable";
-    private String customSchemaWithCharFileName = "CustomWritableWithChar";
-    private String customSchemaWithCircleFileName = "CustomWritableWithCircle";
+    private final String schemaPackage = "org.greenplum.pxf.automation.dataschema.";
+    private final String customSchemaFileName = "CustomWritable";
+    private final String customSchemaWithCharFileName = "CustomWritableWithChar";
+    private final String customSchemaWithCircleFileName = "CustomWritableWithCircle";
 
-    private String[] customWritableFields = {
+    private ProtocolEnum protocol;
+
+    private final String[] customWritableFields = {
             "tmp1   TIMESTAMP",
             "num1   INTEGER",
             "num2   INTEGER",
@@ -70,6 +76,9 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
     protected void beforeClass() throws Exception {
         super.beforeClass();
 
+        // protocol being used for this test
+        protocol = ProtocolUtils.getProtocol();
+
         // path for storing data on HDFS (for processing by PXF)
         hdfsPath = hdfs.getWorkingDirectory() + "/sequence/";
 
@@ -96,78 +105,45 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
         prepareData();
     }
 
-    private void prepareData() throws Exception {
-
-        String writableInsideSequenceFileName = "writable_inside_sequence.tbl";
-        Table dataTable = new Table("dataTable", null);
-        Object[] data = FileFormatsUtils.prepareData(new CustomSequencePreparer(), 100, dataTable);
-        hdfs.writeSequenceFile(data, hdfsPath + writableInsideSequenceFileName);
-    }
-
-    @Override
-    protected void afterMethod() throws Exception {
-        super.afterMethod();
-    }
-
-    @Override
-    protected void beforeMethod() throws Exception {
-
-        writableExTable = TableFactory.getPxfWritableSequenceTable(writableTableName,
-                null, hdfsWritePath + writableTableName, null);
-        writableExTable.setHost(pxfHost);
-        writableExTable.setPort(pxfPort);
-
-        readableExTable = TableFactory.getPxfReadableSequenceTable(readableTableName,
-                null, hdfsWritePath + writableTableName, null);
-        readableExTable.setHost(pxfHost);
-        readableExTable.setPort(pxfPort);
-    }
-
     /**
      * Sequence file write and read - all compression combinations
      *
      * @throws Exception if test fails to run
      */
-    @Test(groups = { "features", "gpdb", "hcfs", "security" })
+    @Test(groups = {"features", "gpdb", "hcfs", "security"})
     @Ignore("flaky ssh connection")
     public void writeAndRead() throws Exception {
 
-        String[] codecs = { null,
+        String[] codecs = {null,
                 "org.apache.hadoop.io.compress.DefaultCodec",
-                "org.apache.hadoop.io.compress.BZip2Codec" };
-        String[][] userParams = new String[][] { null,
-                { "COMPRESSION_TYPE=RECORD" },
-                { "COMPRESSION_TYPE=BLOCK" } };
+                "org.apache.hadoop.io.compress.BZip2Codec"};
+        String[][] userParams = new String[][]{null,
+                {"COMPRESSION_TYPE=RECORD"},
+                {"COMPRESSION_TYPE=BLOCK"}};
 
         Table dataTable = new Table("dataTable", null);
         FileFormatsUtils.prepareData(new CustomSequencePreparer(), 100, dataTable);
         File path = new File(dataTempFolder + "/customwritable_data.txt");
         createCustomWritableDataFile(dataTable, path, false);
 
-        writableExTable.setFields(customWritableFields);
-        writableExTable.setDataSchema(schemaPackage + customSchemaFileName);
-        // change name to match existing tinc test
-        readableExTable.setName("writable_in_sequence");
-        readableExTable.setFields(customWritableFields);
-        readableExTable.setDataSchema(schemaPackage + customSchemaFileName);
-
         int testNum = 1;
         for (String codec : codecs) {
             for (String[] userParam : userParams) {
 
-                String hdfsDir = hdfsWritePath + writableTableName + testNum;
-                writableExTable.setPath(hdfsDir);
-                writableExTable.setCompressionCodec(codec);
-                writableExTable.setUserParameters(userParam);
-                gpdb.createTableAndVerify(writableExTable);
-
-                readableExTable.setPath(hdfsDir);
-                gpdb.createTableAndVerify(readableExTable);
-
+                String hdfsDir = hdfsPath + "/write_and_read_" + testNum;
+                writableExTable = prepareWritableSequenceTable("pxf_write_and_read_" + testNum + "_w",
+                        customWritableFields, hdfsDir,
+                        schemaPackage + customSchemaFileName,
+                        userParam, codec);
                 gpdb.copyFromFile(writableExTable, path, null, false);
 
+                readableExTable = prepareReadableSequenceTable("writable_in_sequence",
+                        customWritableFields, hdfsDir, schemaPackage + customSchemaFileName);
+
                 // for HCFS on Cloud, wait a bit for async write in previous steps to finish
-                sleep(10000);
+                if (protocol != ProtocolEnum.HDFS && protocol != ProtocolEnum.FILE) {
+                    sleep(10000);
+                }
 
                 Assert.assertNotEquals(hdfs.listSize(hdfsDir), 0);
 
@@ -182,29 +158,21 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
      *
      * @throws Exception if test fails to run
      */
-    @Test(groups = { "features", "gpdb", "hcfs", "security" })
+    @Test(groups = {"features", "gpdb", "hcfs", "security"})
     public void circleType() throws Exception {
 
-        String[] fields = { "a1 INTEGER", "c1 CIRCLE" };
-        String hdfsDir = hdfsWritePath + writableTableName + "circle";
-
-        writableExTable.setName("wr_circle");
-        writableExTable.setFields(fields);
-        writableExTable.setPath(hdfsDir);
-        writableExTable.setDataSchema(schemaPackage + customSchemaWithCircleFileName);
-        gpdb.createTableAndVerify(writableExTable);
+        String[] fields = {"a1 INTEGER", "c1 CIRCLE"};
+        String hdfsDir = hdfsPath + "/circle_type";
+        writableExTable = prepareWritableSequenceTable("pxf_sequence_circle_type_w",
+                fields, hdfsDir, schemaPackage + customSchemaWithCircleFileName);
 
         Table dataTable = new Table("circle", null);
-        dataTable.addRow(new String[] { "1", "<(3,3),9>" });
-        dataTable.addRow(new String[] { "2", "<(4,4),16>" });
+        dataTable.addRow(new String[]{"1", "<(3,3),9>"});
+        dataTable.addRow(new String[]{"2", "<(4,4),16>"});
         gpdb.insertData(dataTable, writableExTable);
 
-        readableExTable.setName("read_circle");
-        readableExTable.setFields(fields);
-        readableExTable.setPath(hdfsDir);
-        readableExTable.setDataSchema(schemaPackage + customSchemaWithCircleFileName);
-        gpdb.createTableAndVerify(readableExTable);
-
+        readableExTable = prepareReadableSequenceTable("pxf_sequence_circle_type_r",
+                fields, hdfsDir, schemaPackage + customSchemaWithCircleFileName);
         runTincTest("pxf.features.hdfs.writable.sequence.circle.runTest");
     }
 
@@ -213,21 +181,17 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
      *
      * @throws Exception if test fails to run
      */
-    @Test(groups = { "features", "gpdb", "hcfs", "security" })
+    @Test(groups = {"features", "gpdb", "hcfs", "security"})
     public void negativeCharType() throws Exception {
 
-        String[] fields = { "a1 INTEGER", "c1 CHAR" };
-        String hdfsDir = hdfsWritePath + writableTableName + "char";
-
-        writableExTable.setName("wr_char");
-        writableExTable.setFields(fields);
-        writableExTable.setPath(hdfsDir);
-        writableExTable.setDataSchema(schemaPackage + customSchemaWithCharFileName);
-        gpdb.createTableAndVerify(writableExTable);
+        String[] fields = {"a1 INTEGER", "c1 CHAR"};
+        String hdfsDir = hdfsPath + "/negative_char_type";
+        writableExTable = prepareWritableSequenceTable("pxf_negative_char_type_w",
+                fields, hdfsDir, schemaPackage + customSchemaWithCharFileName);
 
         Table dataTable = new Table("data", null);
-        dataTable.addRow(new String[] { "100", "a" });
-        dataTable.addRow(new String[] { "1000", "b" });
+        dataTable.addRow(new String[]{"100", "a"});
+        dataTable.addRow(new String[]{"1000", "b"});
 
         try {
             gpdb.insertData(dataTable, writableExTable);
@@ -243,22 +207,19 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
      *
      * @throws Exception if test fails to run
      */
-    @Test(groups = { "features", "gpdb", "hcfs", "security" })
+    @Test(groups = {"features", "gpdb", "hcfs", "security"})
     public void negativeCompressionTypeNone() throws Exception {
 
-        String[] fields = { "a1 INTEGER", "c1 CHAR" };
-        String hdfsDir = hdfsWritePath + writableTableName + "none";
+        String[] fields = {"a1 INTEGER", "c1 CHAR"};
+        String hdfsDir = hdfsPath + "/negative_compression_type_none";
 
-        writableExTable.setName("compress_type_none");
-        writableExTable.setFields(fields);
-        writableExTable.setPath(hdfsDir);
-        writableExTable.setDataSchema(schemaPackage + customSchemaWithCharFileName);
-        writableExTable.setUserParameters(new String[] { "COMPRESSION_TYPE=NONE" });
-        gpdb.createTableAndVerify(writableExTable);
+        writableExTable = prepareWritableSequenceTable("pxf_negative_compression_type_none",
+                fields, hdfsDir, schemaPackage + customSchemaWithCharFileName,
+                new String[]{"COMPRESSION_TYPE=NONE"}, null);
 
         Table dataTable = new Table("data", null);
-        dataTable.addRow(new String[] { "100", "a" });
-        dataTable.addRow(new String[] { "1000", "b" });
+        dataTable.addRow(new String[]{"100", "a"});
+        dataTable.addRow(new String[]{"1000", "b"});
 
         try {
             gpdb.insertData(dataTable, writableExTable);
@@ -277,19 +238,16 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
      *
      * @throws Exception if test fails to run
      */
-    @Test(groups = { "features", "gpdb", "hcfs", "security" })
+    @Test(groups = {"features", "gpdb", "hcfs", "security"})
     public void recordkeyTextType() throws Exception {
 
         String[] fields = new String[customWritableFields.length + 1];
         fields[0] = "recordkey TEXT";
         System.arraycopy(customWritableFields, 0, fields, 1, customWritableFields.length);
 
-        String hdfsDir = hdfsWritePath + writableTableName + "recordkey";
-        writableExTable.setName("writable_recordkey_text");
-        writableExTable.setPath(hdfsDir);
-        writableExTable.setFields(fields);
-        writableExTable.setDataSchema(schemaPackage + customSchemaFileName);
-        gpdb.createTableAndVerify(writableExTable);
+        String hdfsDir = hdfsPath + "/recordkey_text_type";
+        writableExTable = prepareWritableSequenceTable("pxf_recordkey_text_type_w",
+                fields, hdfsDir, schemaPackage + customSchemaFileName);
 
         Table dataTable = new Table("dataTable", null);
         FileFormatsUtils.prepareData(new CustomSequencePreparer(), 50, dataTable);
@@ -297,12 +255,8 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
         createCustomWritableDataFile(dataTable, path, true);
         gpdb.copyFromFile(writableExTable, path, null, false);
 
-        readableExTable.setName("readable_recordkey_text");
-        readableExTable.setPath(hdfsDir);
-        readableExTable.setFields(fields);
-        readableExTable.setDataSchema(schemaPackage + customSchemaFileName);
-        gpdb.createTableAndVerify(readableExTable);
-
+        readableExTable = prepareReadableSequenceTable("pxf_recordkey_text_type_r",
+                fields, hdfsDir, schemaPackage + customSchemaFileName);
         runTincTest("pxf.features.hdfs.writable.sequence.recordkey_text.runTest");
     }
 
@@ -312,7 +266,7 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
      *
      * @throws Exception if test fails to run
      */
-    @Test(groups = { "features", "gpdb", "hcfs", "security" })
+    @Test(groups = {"features", "gpdb", "hcfs", "security"})
     public void recordkeyIntType() throws Exception {
 
         // Skip this test for tests that are running against a remote cluster
@@ -323,12 +277,9 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
         fields[0] = "recordkey INT";
         System.arraycopy(customWritableFields, 0, fields, 1, customWritableFields.length);
 
-        String hdfsDir = hdfsWritePath + writableTableName + "recordkey_int";
-        writableExTable.setName("writable_recordkey_int");
-        writableExTable.setPath(hdfsDir);
-        writableExTable.setFields(fields);
-        writableExTable.setDataSchema(schemaPackage + customSchemaFileName);
-        gpdb.createTableAndVerify(writableExTable);
+        String hdfsDir = hdfsPath + "/recordkey_int_type";
+        writableExTable = prepareWritableSequenceTable("pxf_recordkey_int_type_w",
+                fields, hdfsDir, schemaPackage + customSchemaFileName);
 
         Table dataTable = new Table("dataTable", null);
         FileFormatsUtils.prepareData(new CustomSequencePreparer(), 50, dataTable);
@@ -341,12 +292,8 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
         String noticeMsg = ".?ound 1 data formatting errors \\(1 or more input rows\\).? .?ejected related input data.*";
         gpdb.runQueryWithExpectedWarning(copyCmd, noticeMsg, true);
 
-        readableExTable.setName("readable_recordkey_int");
-        readableExTable.setPath(hdfsDir);
-        readableExTable.setFields(fields);
-        readableExTable.setDataSchema(schemaPackage + customSchemaFileName);
-        gpdb.createTableAndVerify(readableExTable);
-
+        readableExTable = prepareReadableSequenceTable("pxf_recordkey_int_type_r",
+                fields, hdfsDir, schemaPackage + customSchemaFileName);
         runTincTest("pxf.features.hdfs.writable.sequence.recordkey_int.runTest");
     }
 
@@ -354,9 +301,8 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
      * Create data file based on CustomWritable schema. data is written from dataTable and to path file.
      *
      * @param dataTable Data Table
-     * @param path File path
+     * @param path      File path
      * @param recordkey add recordkey data to the beginning of each row
-     *
      * @throws IOException if test fails to run
      */
     private void createCustomWritableDataFile(Table dataTable, File path, boolean recordkey)
@@ -380,5 +326,37 @@ public class HdfsWritableSequenceTest extends BaseWritableFeature {
         }
 
         out.close();
+    }
+
+    private void prepareData() throws Exception {
+
+        String writableInsideSequenceFileName = "writable_inside_sequence.tbl";
+        Table dataTable = new Table("dataTable", null);
+        Object[] data = FileFormatsUtils.prepareData(new CustomSequencePreparer(), 100, dataTable);
+        hdfs.writeSequenceFile(data, hdfsPath + writableInsideSequenceFileName);
+    }
+
+    private WritableExternalTable prepareWritableSequenceTable(String name, String[] fields, String path, String schema) throws Exception {
+        return prepareWritableSequenceTable(name, fields, path, schema, null, null);
+    }
+
+    private WritableExternalTable prepareWritableSequenceTable(String name, String[] fields, String path, String schema, String[] userParameters, String codec) throws Exception {
+        WritableExternalTable table = TableFactory.getPxfWritableSequenceTable(
+                name, fields, protocol.getExternalTablePath(hdfs.getBasePath(), path), schema);
+        if (userParameters != null) {
+            table.setUserParameters(userParameters);
+        }
+        if (codec != null) {
+            table.setCompressionCodec(codec);
+        }
+        createTable(table);
+        return table;
+    }
+
+    private ReadableExternalTable prepareReadableSequenceTable(String name, String[] fields, String path, String schema) throws Exception {
+        ReadableExternalTable table = TableFactory.getPxfReadableSequenceTable(
+                name, fields, protocol.getExternalTablePath(hdfs.getBasePath(), path), schema);
+        createTable(table);
+        return table;
     }
 }

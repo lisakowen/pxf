@@ -26,20 +26,24 @@ public enum HcfsType {
     },
     FILE {
         @Override
-        public String getDataUri(Configuration configuration, RequestContext context) {
-            throw new IllegalStateException("core-site.xml is missing or using unsupported file:// as default filesystem");
-        }
+        protected String validateAndNormalizeBasePath(String basePath) {
+            if (StringUtils.isBlank(basePath))
+                throw new IllegalArgumentException(
+                        String.format("configure a valid value for '%s' property for this server to access the filesystem",
+                                CONFIG_KEY_BASE_PATH));
 
-        @Override
-        public String normalizeDataSource(String dataSource) {
-            return dataSource;
+            return "/".equals(basePath)
+                    ? "/"
+                    : "/" + StringUtils.removeEnd(StringUtils.removeStart(basePath, "/"), "/") + "/";
         }
     },
     GS,
     HDFS,
+    // LOCALFILE is deprecated and it will be removed in version 6.0.0 of PXF
+    @Deprecated
     LOCALFILE("file") {
         @Override
-        public String normalizeDataSource(String dataSource) {
+        public String validateAndNormalizeDataSource(String dataSource) {
             return dataSource;
         }
     },
@@ -49,6 +53,8 @@ public enum HcfsType {
     // We prefer WASBS over WASB for Azure Blob Storage,
     // as it uses SSL for communication to Azure servers
     WASBS;
+
+    public static final String CONFIG_KEY_BASE_PATH = "pxf.fs.basePath";
 
     protected Logger LOG = LoggerFactory.getLogger(this.getClass());
 
@@ -142,11 +148,10 @@ public enum HcfsType {
      * @return an absolute data path for write
      */
     public String getUriForWrite(Configuration configuration, RequestContext context, boolean skipCodecExtension) {
-        String fileName = StringUtils.removeEnd(getDataUri(configuration, context), "/") +
-                "/" +
-                context.getTransactionId() +
-                "_" +
-                context.getSegmentId();
+        String fileName = String.format("%s/%s_%d",
+                StringUtils.removeEnd(getDataUri(configuration, context), "/"),
+                context.getTransactionId(),
+                context.getSegmentId());
 
         if (!skipCodecExtension) {
             String compressCodec = context.getOption("COMPRESSION_CODEC");
@@ -199,8 +204,25 @@ public enum HcfsType {
      * @param dataSource The path to the data source
      * @return the normalized path to the data source
      */
-    public String normalizeDataSource(String dataSource) {
-        return StringUtils.removeStart(dataSource, "/");
+    public String validateAndNormalizeDataSource(String dataSource) {
+
+        String effectiveDataSource = StringUtils.removeStart(dataSource, "/");
+
+        if ("..".equals(effectiveDataSource)
+                || StringUtils.contains(effectiveDataSource, "../")
+                || StringUtils.endsWith(effectiveDataSource, "/..")) {
+            // Disallow relative paths
+            throw new IllegalArgumentException(String
+                    .format("the provided path '%s' is invalid. Relative paths are not allowed by PXF", effectiveDataSource));
+        }
+
+        if (StringUtils.contains(effectiveDataSource, "$")) {
+            // Disallow $ to prevent users to access environment variables
+            throw new IllegalArgumentException(String
+                    .format("the provided path '%s' is invalid. The dollar sign character ($) is not allowed by PXF", effectiveDataSource));
+        }
+
+        return effectiveDataSource;
     }
 
     protected String getDataUriForPrefix(Configuration configuration, RequestContext context, String scheme) {
@@ -212,18 +234,32 @@ public enum HcfsType {
         URI defaultFS = FileSystem.getDefaultUri(configuration);
 
         String uri;
-        String normalizedDataSource = normalizeDataSource(dataSource);
+        String normalizedBasePath = validateAndNormalizeBasePath(configuration.get(CONFIG_KEY_BASE_PATH));
+        String normalizedDataSource = validateAndNormalizeDataSource(dataSource);
 
         if (FILE_SCHEME.equals(defaultFS.getScheme())) {
             // if the defaultFS is file://, but enum is not FILE, use enum scheme only
-            uri = StringUtils.removeEnd(scheme, "://") + "://" + normalizedDataSource;
+            uri = StringUtils.removeEnd(scheme, "://") + "://" + normalizedBasePath + normalizedDataSource;
         } else {
             // if the defaultFS is not file://, use it, instead of enum scheme and append user's path
-            uri = StringUtils.removeEnd(defaultFS.toString(), "/") + "/" + normalizedDataSource;
+            uri = StringUtils.removeEnd(defaultFS.toString(), "/") + "/" + normalizedBasePath + normalizedDataSource;
         }
 
         disableSecureTokenRenewal(uri, configuration);
         return uri;
+    }
+
+    /**
+     * Validates the basePath and normalizes it for the appropriate filesystem
+     *
+     * @param basePath the basePath as configured by the user
+     * @return the normalized basePath
+     */
+    protected String validateAndNormalizeBasePath(String basePath) {
+        return StringUtils.isBlank(basePath)
+                // Return an empty string to prevent "null" in the string concatenation
+                ? ""
+                : StringUtils.removeEnd(StringUtils.removeStart(basePath, "/"), "/") + "/";
     }
 
     /**

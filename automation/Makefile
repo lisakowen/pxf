@@ -9,6 +9,7 @@ SHELL := bash
 UNAME_S := $(shell uname -s)
 MAVEN_TEST_OPTS+= -B -e
 PXF_TMP_LIB := $(HOME)/automation_tmp_lib
+BASE_PATH   ?= /mnt/nfs/var/nfsshare
 
 ifneq "$(TEST)" ""
 	MAVEN_TEST_OPTS+= -Dtest=$(TEST)
@@ -157,6 +158,16 @@ ifneq "$(PROTOCOL)" ""
 	@if [ ! -f "$(PROTOCOL_HOME)/$(PROTOCOL)-site.xml" ]; then \
 		cp $(PXF_HOME)/templates/user/templates/$(PROTOCOL)-site.xml $(PROTOCOL_HOME)/; \
 		cp $(PXF_HOME)/templates/user/templates/mapred-site.xml $(PROTOCOL_HOME)/; \
+		if [ $(PROTOCOL) = file ]; then \
+			if [ ! -d "$(BASE_PATH)" ]; then \
+				echo "The NFS directory '$(BASE_PATH)' does not exist. Please configure it and try again"; \
+				rm -rf $(PROTOCOL_HOME); \
+				exit 1; \
+			fi; \
+			echo "Make sure your $PXF_CONF/conf/pxf-profiles.xml file configures the file:AvroSequenceFile and file:SequenceFile profiles"; \
+			cp $(PXF_HOME)/templates/user/templates/pxf-site.xml $(PROTOCOL_HOME)/; \
+			sed $(SED_OPTS) 's|</configuration>|<property><name>pxf.fs.basePath</name><value>$(BASE_PATH)</value></property></configuration>|g' $(PROTOCOL_HOME)/pxf-site.xml; \
+		fi; \
 		if [ $(PROTOCOL) = s3 ]; then \
 			if [ "$(MINIO)" = "true" ]; then \
 				cp $(PXF_HOME)/templates/user/templates/minio-site.xml $(PROTOCOL_HOME)/$(PROTOCOL)-site.xml; \

@@ -55,6 +55,7 @@ public class SequenceFileAccessorTest {
     public void setup() {
         String path = this.getClass().getClassLoader().getResource("csv/").getPath();
         Configuration configuration = new Configuration();
+        configuration.set("pxf.fs.basePath", "/");
 
         mockConfigurationFactory = mock(ConfigurationFactory.class);
         when(mockConfigurationFactory.initConfiguration("dummy", "dummy", "dummy", null))
@@ -66,7 +67,6 @@ public class SequenceFileAccessorTest {
         context.setUser("dummy");
         context.setDataSource(path);
         context.setSegmentId(0);
-        context.setProfileScheme("localfile");
     }
 
     @Test

@@ -8,9 +8,9 @@ export GPHOME=/usr/local/greenplum-db-devel
 # whether PXF is being installed from a new component-based packaging
 PXF_COMPONENT=${PXF_COMPONENT:=false}
 if [[ ${PXF_COMPONENT} == "true" ]]; then
-    PXF_HOME=/usr/local/pxf-gp${GP_VER}
+	PXF_HOME=/usr/local/pxf-gp${GP_VER}
 else
-    PXF_HOME=${GPHOME}/pxf
+	PXF_HOME=${GPHOME}/pxf
 fi
 export PXF_HOME
 
@@ -21,6 +21,7 @@ SSH_OPTS=(-i cluster_env_files/private_key.pem -o 'StrictHostKeyChecking=no')
 HADOOP_SSH_OPTS=(-o 'StrictHostKeyChecking=no')
 IMPERSONATION=${IMPERSONATION:-true}
 LOCAL_GPHD_ROOT=/singlecluster
+PROTOCOL=${PROTOCOL:-}
 PROXY_USER=${PROXY_USER:-pxfuser}
 
 function configure_local_hdfs() {
@@ -79,6 +80,33 @@ function setup_pxf_on_cluster() {
 	# drop named query file for JDBC test to gpadmin's home on mdw
 	scp "${SSH_OPTS[@]}" pxf_src/automation/src/test/resources/{,hive-}report.sql gpadmin@mdw:
 
+	if [[ "${PROTOCOL}" == "file" ]]; then
+		# drop pxf-profiles.xml file with sequence file profiles for file protocol
+		cat > /tmp/pxf-profiles.xml <<-EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<profiles>
+    <profile>
+        <name>file:AvroSequenceFile</name>
+        <plugins>
+            <fragmenter>org.greenplum.pxf.plugins.hdfs.HdfsDataFragmenter</fragmenter>
+            <accessor>org.greenplum.pxf.plugins.hdfs.SequenceFileAccessor</accessor>
+            <resolver>org.greenplum.pxf.plugins.hdfs.AvroResolver</resolver>
+        </plugins>
+    </profile>
+    <profile>
+        <name>file:SequenceFile</name>
+        <plugins>
+            <fragmenter>org.greenplum.pxf.plugins.hdfs.HdfsDataFragmenter</fragmenter>
+            <accessor>org.greenplum.pxf.plugins.hdfs.SequenceFileAccessor</accessor>
+            <resolver>org.greenplum.pxf.plugins.hdfs.WritableResolver</resolver>
+        </plugins>
+    </profile>
+</profiles>
+EOF
+
+		scp "${SSH_OPTS[@]}" /tmp/pxf-profiles.xml "gpadmin@mdw:${PXF_CONF_DIR}/conf/pxf-profiles.xml"
+	fi
+
 	# init all PXFs using cluster command, configure PXF on master, sync configs and start pxf
 	ssh "${SSH_OPTS[@]}" gpadmin@mdw "
 		source ${GPHOME}/greenplum_path.sh &&
@@ -122,9 +150,17 @@ function setup_pxf_on_cluster() {
 			-e 's|YOUR_DATABASE_JDBC_PASSWORD||' \
 			${PXF_CONF_DIR}/servers/db-hive/jdbc-site.xml &&
 		cp ~gpadmin/hive-report.sql ${PXF_CONF_DIR}/servers/db-hive &&
+		if [[ \"${PROTOCOL}\" == \"file\" ]]; then
+			mkdir -p ${PXF_CONF_DIR}/servers/file
+			cp ${PXF_CONF_DIR}/templates/mapred-site.xml ${PXF_CONF_DIR}/servers/file
+			cp ${PXF_CONF_DIR}/templates/pxf-site.xml ${PXF_CONF_DIR}/servers/file
+			sed -i \
+			-e 's|</configuration>|<property><name>pxf.fs.basePath</name><value>${BASE_PATH}</value></property></configuration>|g' \
+			-e '/<name>pxf.service.user.impersonation<\/name>/ {n;s|<value>.*</value>|<value>false</value>|g;}' \
+			${PXF_CONF_DIR}/servers/file/pxf-site.xml
+		fi &&
 		if [[ ${IMPERSONATION} == true ]]; then
 			cp -r ${PXF_CONF_DIR}/servers/default ${PXF_CONF_DIR}/servers/default-no-impersonation
-
 			if [[ ! -f ${PXF_CONF_DIR}/servers/default-no-impersonation/pxf-site.xml ]]; then
 				cp ${PXF_CONF_DIR}/templates/pxf-site.xml ${PXF_CONF_DIR}/servers/default-no-impersonation/pxf-site.xml
 			fi
@@ -286,6 +322,28 @@ function setup_pxf_kerberos_on_cluster() {
 	"
 }
 
+function configure_nfs() {
+	echo "install the NFS client"
+	yum install -y -q -e 0 nfs-utils
+
+	echo "check available NFS shares in mdw"
+	showmount -e mdw
+
+	echo "create mount point and mount it"
+	mkdir -p "${BASE_PATH}"
+	mount -o nolock -t nfs mdw:/var/nfs "${BASE_PATH}"
+	chown -R gpadmin:gpadmin "${BASE_PATH}"
+	chmod -R 755 "${BASE_PATH}"
+
+	echo "verify the mount worked"
+	mount | grep nfs
+	df -hT
+
+	echo "write a test file to make sure it worked"
+	sudo runuser -l gpadmin -c "touch ${BASE_PATH}/$(hostname)-test"
+	ls -l "${BASE_PATH}"
+}
+
 function run_pxf_automation() {
 	local multiNodesCluster=pxf_src/automation/src/test/resources/sut/MultiNodesCluster.xml
 
@@ -331,6 +389,9 @@ function run_pxf_automation() {
 
 		export ACCESS_KEY_ID='${ACCESS_KEY_ID}' SECRET_ACCESS_KEY='${SECRET_ACCESS_KEY}'
 
+		export BASE_PATH='${BASE_PATH}'
+		export PROTOCOL=${PROTOCOL}
+
 		cd ${PWD}/pxf_src/automation
 		make -C ${PWD}/pxf_src/automation GROUP=${GROUP}
 	EOF
@@ -348,16 +409,30 @@ function run_pxf_automation() {
 }
 
 function _main() {
+
+	remote_access_to_gpdb
+	if [[ "${PROTOCOL}" == "file" ]]; then
+		# ensure user id and group id match the VM id on the container to be able
+		# to read and write files
+		usermod -u  "$(ssh mdw 'id -u gpadmin')" gpadmin
+		groupmod -g "$(ssh mdw 'id -g gpadmin')" gpadmin
+	fi
+
 	cp -R cluster_env_files/.ssh/* /root/.ssh
 	# make an array, gpdb_segments, containing hostnames that contain 'sdw'
 	mapfile -t gpdb_segments < <(grep < cluster_env_files/etc_hostfile -e sdw | awk '{print $1}')
-	if [[ -d dataproc_env_files ]]; then
+	if [[ "${PROTOCOL}" == "file" ]]; then
+		HADOOP_HOSTNAME=localhost
+		HADOOP_USER=gpadmin
+		HDFS_BIN=/singlecluster/bin
+		hadoop_ip=127.0.0.1
+	elif [[ -d dataproc_env_files ]]; then
 		HADOOP_HOSTNAME=$(< dataproc_env_files/name)
 		HADOOP_USER=gpadmin
 		hadoop_ip=$(getent hosts "${HADOOP_HOSTNAME}.c.${GOOGLE_PROJECT_ID}.internal" | awk '{ print $1 }')
 		HADOOP_SSH_OPTS+=(-i dataproc_env_files/google_compute_engine)
 		HDFS_BIN=/usr/bin
-	else
+	elif grep "edw0" cluster_env_files/etc_hostfile; then
 		HADOOP_HOSTNAME=hadoop
 		HADOOP_USER=centos
 		HDFS_BIN=~centos/singlecluster/bin
@@ -377,7 +452,6 @@ function _main() {
 		install_pxf_server
 	fi
 	init_and_configure_pxf_server
-	remote_access_to_gpdb
 
 	inflate_singlecluster
 	configure_local_hdfs
@@ -387,7 +461,11 @@ function _main() {
 
 	setup_pxf_on_cluster
 
-	if [[ $KERBEROS != true ]]; then
+	if [[ "$PROTOCOL" == "file" ]]; then
+		configure_nfs # configures NFS on the container
+	fi
+
+	if [[ "$PROTOCOL" != "file" ]] && [[ $KERBEROS != true ]]; then
 		run_multinode_smoke_test 1000
 	fi
 

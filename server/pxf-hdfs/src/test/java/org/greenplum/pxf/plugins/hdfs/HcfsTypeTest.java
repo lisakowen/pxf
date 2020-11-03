@@ -48,16 +48,6 @@ public class HcfsTypeTest {
     }
 
     @Test
-    public void testFileFormatFails() {
-        thrown.expect(IllegalStateException.class);
-        thrown.expectMessage("core-site.xml is missing or using unsupported file:// as default filesystem");
-
-        HcfsType type = HcfsType.getHcfsType(configuration, context);
-        assertEquals(HcfsType.FILE, type);
-        type.getDataUri(configuration, context);
-    }
-
-    @Test
     public void testCustomProtocolWithFileDefaultFs() {
         context.setProfileScheme("xyz");
 
@@ -121,13 +111,13 @@ public class HcfsTypeTest {
     }
 
     @Test
-    public void testAllowWritingToLocalFileSystemWithLOCALFILE() {
-        context.setProfileScheme("localfile");
+    public void testAllowWritingToLocalFileSystemWithFile() {
+        configuration.set("pxf.fs.basePath", "/");
 
         HcfsType type = HcfsType.getHcfsType(configuration, context);
-        assertEquals(HcfsType.LOCALFILE, type);
+        assertEquals(HcfsType.FILE, type);
         assertEquals("file:///foo/bar.txt", type.getDataUri(configuration, context));
-        assertEquals("same", type.normalizeDataSource("same"));
+        assertEquals("same", type.validateAndNormalizeDataSource("same"));
     }
 
     @Test
@@ -371,6 +361,200 @@ public class HcfsTypeTest {
         String dataUri = type.getDataUri(configuration, context);
         assertEquals("hdfs://0.0.0.0:8020/tmp/issues/172848577/[a-b].csv", dataUri);
         assertEquals("0.0.0.0", configuration.get(MRJobConfig.JOB_NAMENODES_TOKEN_RENEWAL_EXCLUDE));
+    }
+
+    @Test
+    public void testFailureOnFileWhenBasePathIsNotConfigured() {
+        thrown.expect(IllegalArgumentException.class);
+        thrown.expectMessage("configure a valid value for 'pxf.fs.basePath' property for this server to access the filesystem");
+
+        HcfsType.getHcfsType(configuration, context);
+    }
+
+    @Test
+    public void testFailureOnFileWhenInvalidDefaultFSIsProvided() {
+        thrown.expect(IllegalArgumentException.class);
+        thrown.expectMessage("profile protocol (file) is not compatible with server filesystem (s3a)");
+
+        configuration.set("fs.defaultFS", "s3a://abc/");
+        context.setProfileScheme("file");
+        HcfsType.getHcfsType(configuration, context);
+    }
+
+    @Test
+    public void testBasePathIsConfiguredToRootDirectory() {
+        configuration.set("pxf.fs.basePath", "/");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        String uri = file.getDataUri(configuration, context);
+        assertEquals("file:///foo/bar.txt", uri);
+    }
+
+    @Test
+    public void testBasePathIsConfiguredToAFixedBucket() {
+        configuration.set("pxf.fs.basePath", "some-bucket");
+        context.setProfileScheme("s3a");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        String uri = file.getDataUri(configuration, context);
+        assertEquals("s3a://some-bucket/foo/bar.txt", uri);
+    }
+
+    @Test
+    public void testBasePathIsConfiguredToSomeValueForCustomFS() {
+        configuration.set("pxf.fs.basePath", "private");
+        configuration.set("fs.defaultFS", "xyz://abc");
+        context.setDataSource("foo/bar");
+        context.setTransactionId("XID-XYZ-123456");
+        context.setSegmentId(3);
+        context.addOption("COMPRESSION_CODEC", "snappy");
+
+        HcfsType type = HcfsType.getHcfsType(configuration, context);
+        assertEquals("xyz://abc/private/foo/bar/XID-XYZ-123456_3.snappy", type.getUriForWrite(configuration, context));
+    }
+
+    @Test
+    public void testBasePathIsConfiguredToASingleCharPath() {
+        configuration.set("pxf.fs.basePath", "p");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        String uri = file.getDataUri(configuration, context);
+        assertEquals("file:///p/foo/bar.txt", uri);
+
+        // trailing / in basePath
+        configuration.set("pxf.fs.basePath", "p/");
+        file = HcfsType.getHcfsType(configuration, context);
+        uri = file.getDataUri(configuration, context);
+        assertEquals("file:///p/foo/bar.txt", uri);
+
+        // preceding / in basePath
+        configuration.set("pxf.fs.basePath", "/p");
+        file = HcfsType.getHcfsType(configuration, context);
+        uri = file.getDataUri(configuration, context);
+        assertEquals("file:///p/foo/bar.txt", uri);
+
+        // trailing and preceding / in basePath
+        configuration.set("pxf.fs.basePath", "/p/");
+        file = HcfsType.getHcfsType(configuration, context);
+        uri = file.getDataUri(configuration, context);
+        assertEquals("file:///p/foo/bar.txt", uri);
+    }
+
+    @Test
+    public void testBasePathIsConfiguredToSomeValue() {
+        configuration.set("pxf.fs.basePath", "my/base/path");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        String uri = file.getDataUri(configuration, context);
+        assertEquals("file:///my/base/path/foo/bar.txt", uri);
+
+        // trailing / in basePath
+        configuration.set("pxf.fs.basePath", "my/base/path/");
+        uri = file.getDataUri(configuration, context);
+        assertEquals("file:///my/base/path/foo/bar.txt", uri);
+
+        // preceding / in basePath
+        configuration.set("pxf.fs.basePath", "/my/base/path");
+        uri = file.getDataUri(configuration, context);
+        assertEquals("file:///my/base/path/foo/bar.txt", uri);
+
+        // trailing and preceding / in basePath
+        configuration.set("pxf.fs.basePath", "/my/base/path/");
+        uri = file.getDataUri(configuration, context);
+        assertEquals("file:///my/base/path/foo/bar.txt", uri);
+    }
+
+    @Test
+    public void testFailsWhenARelativeDataSourceIsProvided1() {
+        thrown.expect(IllegalArgumentException.class);
+        thrown.expectMessage("the provided path '../../../etc/passwd' is invalid. Relative paths are not allowed by PXF");
+
+        configuration.set("pxf.fs.basePath", "/some/base/path");
+        context.setDataSource("../../../etc/passwd");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        file.getDataUri(configuration, context);
+    }
+
+    @Test
+    public void testFailsWhenARelativeDataSourceIsProvided2() {
+        thrown.expect(IllegalArgumentException.class);
+        thrown.expectMessage("the provided path '..' is invalid. Relative paths are not allowed by PXF");
+
+        configuration.set("pxf.fs.basePath", "/some/base/path");
+        context.setDataSource("..");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        file.getDataUri(configuration, context);
+    }
+
+    @Test
+    public void testFailsWhenARelativeDataSourceIsProvided3() {
+        thrown.expect(IllegalArgumentException.class);
+        thrown.expectMessage("the provided path 'dir1/../dir2' is invalid. Relative paths are not allowed by PXF");
+
+        configuration.set("pxf.fs.basePath", "/some/base/path");
+        context.setDataSource("dir1/../dir2");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        file.getDataUri(configuration, context);
+    }
+
+    @Test
+    public void testFailsWhenARelativeDataSourceIsProvided4() {
+        thrown.expect(IllegalArgumentException.class);
+        thrown.expectMessage("the provided path '../' is invalid. Relative paths are not allowed by PXF");
+
+        configuration.set("pxf.fs.basePath", "/some/base/path");
+        context.setDataSource("../");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        file.getDataUri(configuration, context);
+    }
+
+    @Test
+    public void testFailsWhenARelativeDataSourceIsProvided5() {
+        thrown.expect(IllegalArgumentException.class);
+        thrown.expectMessage("the provided path 'a/..' is invalid. Relative paths are not allowed by PXF");
+
+        configuration.set("pxf.fs.basePath", "/some/base/path");
+        context.setDataSource("a/..");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        file.getDataUri(configuration, context);
+    }
+
+    @Test
+    public void testFailsWhenARelativeDataSourceIsProvidedForWrite() {
+        thrown.expect(IllegalArgumentException.class);
+        thrown.expectMessage("the provided path '../../../etc/passwd' is invalid. Relative paths are not allowed by PXF");
+
+        configuration.set("pxf.fs.basePath", "/some/base/path");
+        context.setDataSource("../../../etc/passwd");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        file.getUriForWrite(configuration, context);
+    }
+
+    @Test
+    public void testDataSourceWithTwoDotsInName() {
+        configuration.set("pxf.fs.basePath", "/some/base/path");
+        context.setDataSource("a..txt");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        String uri = file.getDataUri(configuration, context);
+        assertEquals("file:///some/base/path/a..txt", uri);
+    }
+
+    @Test
+    public void testFailsWhenADollarSignInDataSourceIsProvided() {
+        thrown.expect(IllegalArgumentException.class);
+        thrown.expectMessage("the provided path '$HOME/secret-files-in-gpadmin-home' is invalid. The dollar sign character ($) is not allowed by PXF");
+
+        configuration.set("pxf.fs.basePath", "/");
+        context.setDataSource("$HOME/secret-files-in-gpadmin-home");
+        HcfsType file = HcfsType.getHcfsType(configuration, context);
+        file.getDataUri(configuration, context);
+    }
+
+    @Test
+    public void testDfsUserHomeBaseDirPropertyHasNoSideEffectInURI() {
+        configuration.set("fs.defaultFS", "hdfs://abc:8020/");
+        configuration.set("dfs.user.home.base.dir", "/home/francisco/");
+        context.setDataSource("foo/bar.txt");
+
+        HcfsType type = HcfsType.getHcfsType(configuration, context);
+        String dataUri = type.getDataUri(configuration, context);
+        assertEquals("hdfs://abc:8020/foo/bar.txt", dataUri);
     }
 
 }

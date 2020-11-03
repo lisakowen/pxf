@@ -20,28 +20,25 @@ package org.greenplum.pxf.plugins.hive.utilities;
  */
 
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Output;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.ql.io.orc.OrcFile;
 import org.apache.hadoop.hive.ql.io.orc.Reader;
-import org.apache.hadoop.hive.serde2.Deserializer;
+import org.apache.hadoop.hive.serde.serdeConstants;
 import org.greenplum.pxf.api.UnsupportedTypeException;
 import org.greenplum.pxf.api.io.DataType;
 import org.greenplum.pxf.api.model.Metadata;
 import org.greenplum.pxf.api.model.RequestContext;
 import org.greenplum.pxf.api.utilities.EnumGpdbType;
-import org.greenplum.pxf.api.utilities.Utilities;
-import org.greenplum.pxf.plugins.hive.HiveUserData;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.Map;
+import java.util.Properties;
 
 
 /**
@@ -50,7 +47,16 @@ import java.util.stream.Stream;
  */
 public class HiveUtilities {
 
-    private static final Logger LOG = LoggerFactory.getLogger(HiveUtilities.class);
+    private static final int DEFAULT_DELIMITER_CODE = 44;
+
+    // The Kryo instance is not thread safe, and quite expensive to build,
+    // storing it on a ThreadLocal is a recommended way to make sure that the
+    // serializer is thread safe.
+    private static final ThreadLocal<Kryo> kryo = ThreadLocal.withInitial(() -> {
+        Kryo k = new Kryo();
+        k.addDefaultSerializer(Map.class, PropertiesSerializer.class);
+        return k;
+    });
 
     /**
      * Checks if hive type is supported, and if so return its matching GPDB
@@ -204,57 +210,6 @@ public class HiveUtilities {
     }
 
     /**
-     * The method parses raw user data into HiveUserData class
-     *
-     * @param context input data
-     * @return instance of HiveUserData class
-     * @throws IllegalArgumentException when incorrect number of tokens in Hive user data received
-     */
-    public static HiveUserData parseHiveUserData(RequestContext context) throws IllegalArgumentException {
-        String userData = new String(context.getFragmentUserData());
-        String[] toks = userData.split(HiveUserData.HIVE_UD_DELIM, HiveUserData.getNumOfTokens());
-
-        if (toks.length != (HiveUserData.getNumOfTokens())) {
-            throw new IllegalArgumentException("HiveInputFormatFragmenter expected "
-                    + HiveUserData.getNumOfTokens() + " tokens, but got " + toks.length);
-        }
-
-        String indexesStr = toks[8];
-        List<Integer> indexes = null;
-
-        if (indexesStr != null && !"null".equals(indexesStr)) {
-            indexes = Stream.of(indexesStr.split(","))
-                    .map(s -> "null".equals(s) ? null : Integer.parseInt(s))
-                    .collect(Collectors.toList());
-        }
-
-        return new HiveUserData(
-                toks[0],
-                toks[1],
-                toks[2],
-                toks[3],
-                Boolean.parseBoolean(toks[4]),
-                toks[5],
-                toks[6],
-                Integer.parseInt(toks[7]),
-                indexes,
-                toks[9],
-                toks[10]);
-    }
-
-    /**
-     * Creates an instance of a given serde type
-     *
-     * @param serdeClassName the name of the serde class
-     * @return instance of a given serde
-     * @throws Exception if an error occurs during the creation of SerDe instance
-     */
-    public static Deserializer createDeserializer(String serdeClassName) throws Exception {
-        Deserializer deserializer = (Deserializer) Utilities.createAnyInstance(serdeClassName);
-        return deserializer;
-    }
-
-    /**
      * Creates ORC file reader.
      *
      * @param requestContext input data with given data source
@@ -267,5 +222,52 @@ public class HiveUtilities {
         } catch (Exception e) {
             throw new RuntimeException("Exception while getting orc reader", e);
         }
+    }
+
+    /**
+     * The method which extracts field delimiter from storage descriptor.
+     * When unable to extract delimiter from storage descriptor, default value is used
+     *
+     * @param sd StorageDescriptor of table/partition
+     * @return ASCII code of delimiter
+     */
+    public static int getDelimiterCode(StorageDescriptor sd) {
+        if (sd != null && sd.getSerdeInfo() != null && sd.getSerdeInfo().getParameters() != null) {
+            Map<String, String> parameters = sd.getSerdeInfo().getParameters();
+            String delimiter = parameters.get(serdeConstants.FIELD_DELIM);
+            if (delimiter != null) {
+                return delimiter.charAt(0);
+            }
+
+            delimiter = parameters.get(serdeConstants.SERIALIZATION_FORMAT);
+            if (delimiter != null) {
+                return Integer.parseInt(delimiter);
+            }
+        }
+
+        return DEFAULT_DELIMITER_CODE;
+    }
+
+    /**
+     * Returns a new Kryo from ThreadLocal
+     *
+     * @return a new Kryo from ThreadLocal
+     */
+    public static Kryo getKryo() {
+        return kryo.get();
+    }
+
+
+    /**
+     * Serializer a {@link Properties} object into a byte array
+     *
+     * @param properties the properties to serialize
+     * @return the serialized properties as a byte array
+     */
+    public static byte[] serializeProperties(Properties properties) {
+        Output out = new Output(4 * 1024, 10 * 1024 * 1024);
+        getKryo().writeObject(out, properties);
+        out.close();
+        return out.toBytes();
     }
 }

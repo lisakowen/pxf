@@ -53,6 +53,12 @@
 		<port>10000</port>
 		<userName>gpadmin</userName>
 	</hive>
+	<file>
+		<class>org.greenplum.pxf.automation.components.hdfs.Hdfs</class>
+		<workingDirectory>${base.path}/tmp/pxf_automation_data/__UUID__</workingDirectory>
+		<hadoopRoot>/home/gpadmin/pxf/servers/file</hadoopRoot>
+		<scheme>file</scheme>
+	</file>
 	<tinc>
 		<class>org.greenplum.pxf.automation.components.tinc.Tinc</class>
 		<host>localhost</host>

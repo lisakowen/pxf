@@ -35,6 +35,7 @@ public class AvroUtilitiesTest {
         avroDirectory = this.getClass().getClassLoader().getResource("avro/").getPath();
         context = new RequestContext();
         configuration = new Configuration();
+        configuration.set("pxf.fs.basePath", "/");
         context.setDataSource(avroDirectory + "test.avro");
         testSchema = generateTestSchema();
         avroUtilities = AvroUtilities.getInstance();
